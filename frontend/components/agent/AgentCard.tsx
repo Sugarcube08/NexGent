@@ -4,7 +4,7 @@ import React from 'react';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useRouter } from 'next/navigation';
-import { Play, User, Clock } from 'lucide-react';
+import { Play, User, Clock, Trash2 } from 'lucide-react';
 
 interface AgentCardProps {
   agent: {
@@ -14,9 +14,11 @@ interface AgentCardProps {
     price: number;
     creator_wallet: string;
   };
+  onDelete?: () => void;
+  isDeleting?: boolean;
 }
 
-export const AgentCard = ({ agent }: AgentCardProps) => {
+export const AgentCard = ({ agent, onDelete, isDeleting }: AgentCardProps) => {
   const router = useRouter();
 
   const truncatedWallet = `${agent.creator_wallet.slice(0, 4)}...${agent.creator_wallet.slice(-4)}`;
@@ -44,15 +46,26 @@ export const AgentCard = ({ agent }: AgentCardProps) => {
         </p>
       </CardContent>
 
-      <CardFooter>
+      <CardFooter className="flex gap-2">
         <Button 
-          className="w-full gap-2" 
+          className="flex-1 gap-2" 
           variant="secondary"
           onClick={() => router.push(`/agent/${agent.id}`)}
         >
           <Play size={16} fill="currentColor" />
           Configure & Run
         </Button>
+        {onDelete && (
+          <Button
+            variant="outline"
+            className="px-3 border-zinc-800 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-500"
+            onClick={onDelete}
+            isLoading={isDeleting}
+            title="Delete Agent"
+          >
+            <Trash2 size={16} />
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

@@ -60,3 +60,11 @@ async def get_all_agents(db: AsyncSession):
 async def get_agents_by_creator(db: AsyncSession, creator_wallet: str):
     result = await db.execute(select(Agent).where(Agent.creator_wallet == creator_wallet))
     return result.scalars().all()
+
+async def delete_agent(db: AsyncSession, agent_id: str):
+    result = await db.execute(select(Agent).where(Agent.id == agent_id))
+    db_agent = result.scalars().first()
+    if db_agent:
+        await db.delete(db_agent)
+        await db.commit()
+    return db_agent

@@ -18,7 +18,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(String, primary_key=True, index=True)
-    agent_id = Column(String, ForeignKey("agents.id"), nullable=False)
+    agent_id = Column(String, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
     user_wallet = Column(String, nullable=False, index=True)
     input_data = Column(Text, nullable=False)
     result = Column(Text, nullable=True)
@@ -29,7 +29,7 @@ class Task(Base):
 class Payment(Base):
     __tablename__ = "payments"
 
-    task_id = Column(String, ForeignKey("tasks.id"), primary_key=True)
+    task_id = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
     tx_signature = Column(String, unique=True, nullable=False)
     amount = Column(Float, nullable=False)
     status = Column(String, default="locked") # locked, released

@@ -15,7 +15,7 @@ import uuid
 
 router = APIRouter()
 
-@router.post("/run/", response_model=TaskResponse)
+@router.post("/run", response_model=TaskResponse)
 async def run_agent(
     req: RunRequest,
     db: AsyncSession = Depends(get_db),
@@ -82,7 +82,7 @@ async def run_agent(
         error=exec_result["error"] if not exec_result["success"] else None
     )
 
-@router.post("/test/")
+@router.post("/test")
 async def test_agent(
     req: AgentTestRequest,
     current_user: str = Depends(get_current_user)
@@ -103,7 +103,7 @@ async def test_agent(
         input_data=req.input_data or {"test": True}
     )
 
-@router.post("/deploy/", response_model=AgentResponse)
+@router.post("/deploy", response_model=AgentResponse)
 async def deploy_agent(
     req: AgentCreate,
     db: AsyncSession = Depends(get_db),
@@ -120,7 +120,7 @@ async def deploy_agent(
     
     return await agent_service.create_agent(db, req, current_user)
 
-@router.get("/tasks/", response_model=List[TaskHistoryResponse])
+@router.get("/tasks", response_model=List[TaskHistoryResponse])
 async def list_my_tasks(
     db: AsyncSession = Depends(get_db),
     current_user: str = Depends(get_current_user)
@@ -130,20 +130,35 @@ async def list_my_tasks(
     )
     return result.scalars().all()
 
-@router.get("/me/", response_model=List[AgentResponse])
+@router.get("/me", response_model=List[AgentResponse])
 async def list_my_agents(
     db: AsyncSession = Depends(get_db),
     current_user: str = Depends(get_current_user)
 ):
     return await agent_service.get_agents_by_creator(db, current_user)
 
-@router.get("/", response_model=List[AgentResponse])
+@router.get("", response_model=List[AgentResponse])
 async def list_agents(db: AsyncSession = Depends(get_db)):
     return await agent_service.get_all_agents(db)
 
-@router.get("/{agent_id}/", response_model=AgentResponse)
+@router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
     agent = await agent_service.get_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     return agent
+
+@router.delete("/{agent_id}")
+async def delete_agent(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    agent = await agent_service.get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.creator_wallet != current_user:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this agent")
+    
+    await agent_service.delete_agent(db, agent_id)
+    return {"message": "Agent deleted successfully"}

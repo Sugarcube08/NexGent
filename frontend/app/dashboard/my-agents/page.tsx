@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { getMyAgents } from '@/lib/api';
+import { getMyAgents, deleteAgent } from '@/lib/api';
 import { AgentCard } from '@/components/agent/AgentCard';
 import { Loader2, Plus, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -14,6 +14,7 @@ export default function MyAgentsPage() {
   
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -25,6 +26,21 @@ export default function MyAgentsPage() {
       setLoading(false);
     }
   }, [isAuthenticated]);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this agent? All associated tasks and history will be permanently lost.')) return;
+    
+    setDeletingId(id);
+    try {
+      await deleteAgent(id);
+      setAgents(agents.filter((a: any) => a.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete agent');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (!connected) {
     return (
@@ -73,7 +89,12 @@ export default function MyAgentsPage() {
       ) : agents.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {agents.map((agent: any) => (
-            <AgentCard key={agent.id} agent={agent} />
+            <AgentCard 
+              key={agent.id} 
+              agent={agent} 
+              onDelete={() => handleDelete(agent.id)}
+              isDeleting={deletingId === agent.id}
+            />
           ))}
         </div>
       ) : (

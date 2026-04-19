@@ -70,7 +70,7 @@ async def run_agent(
     if not exec_result["success"]:
         db_task.result = exec_result["error"]
     
-    # Release payment to developer (conceptually)
+    # Release payment to developer
     db_payment.status = "released"
     
     await db.commit()

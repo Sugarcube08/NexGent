@@ -1,7 +1,7 @@
 import ast
 
 FORBIDDEN_IMPORTS = {"os", "sys", "subprocess", "socket", "requests", "httpx", "urllib", "builtins", "importlib"}
-ALLOWED_IMPORTS = {"math", "time", "json", "datetime", "random"}
+ALLOWED_IMPORTS = {"math", "time", "json", "datetime", "random", "abc", "typing", "collections", "itertools", "functools", "re"}
 
 def validate_agent_code(code: str):
     try:
@@ -11,24 +11,22 @@ def validate_agent_code(code: str):
 
     has_run_method = False
     has_agent_instance = False
-    class_names_with_run = set()
 
     for node in ast.walk(tree):
-        # 1. Check for forbidden imports
+        # 1. Check for allowed imports (Strict Whitelist)
         if isinstance(node, ast.Import):
             for alias in node.names:
                 base_module = alias.name.split('.')[0]
-                if base_module in FORBIDDEN_IMPORTS:
-                    return False, f"Forbidden import detected: {alias.name}"
+                if base_module not in ALLOWED_IMPORTS:
+                    return False, f"Import of '{base_module}' is not allowed. Allowed: {', '.join(sorted(ALLOWED_IMPORTS))}"
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 base_module = node.module.split('.')[0]
-                if base_module in FORBIDDEN_IMPORTS:
-                    return False, f"Forbidden import from detected: {node.module}"
+                if base_module not in ALLOWED_IMPORTS:
+                    return False, f"Import from '{base_module}' is not allowed. Allowed: {', '.join(sorted(ALLOWED_IMPORTS))}"
         elif isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id == "__import__":
-                if node.args and isinstance(node.args[0], ast.Constant) and node.args[0].value in FORBIDDEN_IMPORTS:
-                    return False, f"Forbidden dynamic import detected: {node.args[0].value}"
+                return False, "Dynamic __import__ is not allowed"
 
         # 2. Check for classes with run method
         if isinstance(node, ast.ClassDef):

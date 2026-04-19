@@ -9,5 +9,12 @@ router = APIRouter()
 
 @router.get("/featured", response_model=List[AgentResponse])
 async def get_featured_agents(db: AsyncSession = Depends(get_db)):
-    # For MVP, just return all agents
-    return await agent_service.get_all_agents(db)
+    # Return 6 most recently created agents as featured
+    from sqlalchemy import desc
+    from app.db.models.models import Agent
+    from sqlalchemy.future import select
+    
+    result = await db.execute(
+        select(Agent).order_by(desc(Agent.created_at)).limit(6)
+    )
+    return result.scalars().all()

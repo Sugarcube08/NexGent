@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Rocket, Shield, Zap, ArrowRight, Github } from 'lucide-react';
+import NoSSR from '@/components/ui/NoSSR';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -20,7 +21,9 @@ export default function LandingPage() {
         </div>
         <div className="flex items-center gap-6">
           <a href="#" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Documentation</a>
-          <WalletMultiButton />
+          <NoSSR>
+            <WalletMultiButton />
+          </NoSSR>
         </div>
       </nav>
 

@@ -50,6 +50,23 @@ app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(agents_router, prefix="/agents", tags=["agents"])
 app.include_router(marketplace_router, prefix="/marketplace", tags=["marketplace"])
 
+@app.get("/health")
+async def health_check(db: AsyncSession = Depends(get_db)):
+    try:
+        from sqlalchemy import text
+        await db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "database": "disconnected", "error": str(e)},
+        )
+
 @app.get("/")
 async def root():
-    return {"message": "Welcome to Shoujiki API"}
+    return {
+        "message": "Welcome to Shoujiki API",
+        "version": "1.0.0",
+        "docs": "/docs"
+    }

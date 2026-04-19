@@ -5,6 +5,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
 import { Button } from '@/components/ui/Button';
 import { Loader2, LogIn } from 'lucide-react';
+import NoSSR from '@/components/ui/NoSSR';
 
 export const Navbar = () => {
   const { connected, isAuthenticated, login, loading, publicKey } = useWalletAuth();
@@ -16,26 +17,28 @@ export const Navbar = () => {
       </div>
 
       <div className="flex items-center gap-4">
-        <WalletMultiButton />
-        
-        {connected && !isAuthenticated && (
-          <Button 
-            onClick={login} 
-            isLoading={loading}
-            variant="primary"
-            className="gap-2"
-          >
-            <LogIn size={18} />
-            Authenticate API
-          </Button>
-        )}
+        <NoSSR>
+          <WalletMultiButton />
+          
+          {connected && !isAuthenticated && (
+            <Button 
+              onClick={login} 
+              isLoading={loading}
+              variant="primary"
+              className="ml-4 gap-2"
+            >
+              <LogIn size={18} />
+              Authenticate API
+            </Button>
+          )}
 
-        {isAuthenticated && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs font-mono text-green-500">Authenticated</span>
-          </div>
-        )}
+          {isAuthenticated && (
+            <div className="ml-4 flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs font-mono text-green-500">Authenticated</span>
+            </div>
+          )}
+        </NoSSR>
       </div>
     </nav>
   );

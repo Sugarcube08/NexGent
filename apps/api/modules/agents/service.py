@@ -82,8 +82,7 @@ async def create_agent(db: AsyncSession, agent_data: AgentCreate, creator_wallet
             current_version=agent_data.version,
             price=agent_data.price,
             creator_wallet=creator_wallet,
-            mint_address=mint_address,
-            risk_score=0.05
+            mint_address=mint_address
         )
         db.add(db_agent)
     

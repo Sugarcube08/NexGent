@@ -6,7 +6,6 @@ from backend.db.session import engine, Base, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.modules.auth.routes import router as auth_router
 from backend.modules.agents.routes import router as agents_router
-from backend.modules.marketplace.routes import router as marketplace_router
 from backend.modules.billing.routes import router as billing_router
 from backend.modules.auth.middleware import X402PaymentMiddleware
 import logging
@@ -53,21 +52,11 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(agents_router, prefix="/agents", tags=["agents"])
-app.include_router(marketplace_router, prefix="/marketplace", tags=["marketplace"])
 app.include_router(billing_router, prefix="/billing", tags=["billing"])
 
 @app.get("/health")
-async def health_check(db: AsyncSession = Depends(get_db)):
-    try:
-        from sqlalchemy import text
-        await db.execute(text("SELECT 1"))
-        return {"status": "healthy", "database": "connected"}
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unhealthy", "database": "disconnected", "error": str(e)},
-        )
+async def health_check():
+    return {"status": "healthy"}
 
 @app.get("/")
 async def root():

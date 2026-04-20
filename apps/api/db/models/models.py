@@ -13,7 +13,6 @@ class Agent(Base):
     price = Column(Float, nullable=False)
     creator_wallet = Column(String, nullable=False, index=True)
     mint_address = Column(String, nullable=True, index=True) # Metaplex Core Asset Address
-    risk_score = Column(Float, nullable=True, default=0.0) # Kora Risk Score (0-1, lower is better)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Task(Base):
@@ -36,10 +35,3 @@ class Payment(Base):
     amount = Column(Float, nullable=False)
     status = Column(String, default="locked") # locked, released
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-class WalletBalance(Base):
-    __tablename__ = "wallet_balances"
-
-    wallet = Column(String, primary_key=True, index=True)
-    balance = Column(Float, default=0.0)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

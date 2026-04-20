@@ -32,7 +32,6 @@ class AgentResponse(AgentBase):
     current_version: str
     creator_wallet: str
     mint_address: Optional[str] = None
-    risk_score: Optional[float] = 0.0
     created_at: datetime
 
     class Config:

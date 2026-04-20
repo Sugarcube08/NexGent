@@ -3,14 +3,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getAgent, runAgent } from '@/lib/api';
-import { createEscrowTransaction, confirmTx } from '@/lib/solana';
+import { createEscrowTransaction, confirmTx, createSolanaPayURL, PLATFORM_WALLET } from '@/lib/solana';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
 import { Button } from '@/components/ui/Button';
 import { TextArea } from '@/components/ui/Input';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
-import { Loader2, ArrowLeft, Play, ShieldCheck, Terminal, AlertCircle } from 'lucide-react';
-import { PublicKey } from '@solana/web3.js';
+import { Loader2, ArrowLeft, Play, ShieldCheck, Terminal, AlertCircle, QrCode, CreditCard, BadgeCheck } from 'lucide-react';
+import { PublicKey, Keypair } from '@solana/web3.js';
 
 export default function AgentRunPage() {
   const { id } = useParams();
@@ -23,6 +23,7 @@ export default function AgentRunPage() {
   const [inputData, setInputData] = useState('{"text": "Hello"}');
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'idle' | 'paying' | 'verifying' | 'executing' | 'done'>('idle');
+  const [paymentType, setPaymentType] = useState<'escrow' | 'solana_pay'>('solana_pay');
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
 
@@ -39,27 +40,64 @@ export default function AgentRunPage() {
     setError('');
     setResult(null);
     try {
-      // 1. Generate unique Task ID
       const taskId = crypto.randomUUID();
       
-      // 2. Payment into Escrow
-      setStatus('paying');
-      const tx = await createEscrowTransaction(
-        publicKey, 
-        new PublicKey(agent.creator_wallet), 
-        taskId, 
-        agent.price
-      );
-      const signature = await sendTransaction(tx, connection);
+      if (paymentType === 'solana_pay') {
+        setStatus('paying');
+        // Generate a random reference keypair
+        const reference = Keypair.generate().publicKey;
+        
+        const payUrl = createSolanaPayURL(
+          new PublicKey(PLATFORM_WALLET),
+          agent.price,
+          reference,
+          "Shoujiki Agent Run",
+          `Executing agent ${agent.name}`
+        );
+
+        // For demo/hackathon, we'll open the URL in a new tab or show it
+        // Ideally, we use the wallet-adapter to sign a transaction derived from this or use the mobile wallet adapter
+        // Since we are in a web environment, we can also just create the transaction manually to match Solana Pay spec
+        
+        // Let's create a standard transfer transaction with the reference
+        const { SystemProgram, Transaction } = await import('@solana/web3.js');
+        const tx = new Transaction().add(
+          SystemProgram.transfer({
+            fromPubkey: publicKey,
+            toPubkey: new PublicKey(PLATFORM_WALLET),
+            lamports: agent.price * 1e9,
+          })
+        );
+        // Add the reference to the instruction for verification
+        tx.instructions[0].keys.push({ pubkey: reference, isSigner: false, isWritable: false });
+        
+        const signature = await sendTransaction(tx, connection);
+        
+        setStatus('verifying');
+        await confirmTx(connection, signature);
+        
+        setStatus('executing');
+        const res = await runAgent(agent.id, JSON.parse(inputData), taskId, reference.toBase58(), 'solana_pay');
+        setResult(res);
+      } else {
+        // Legacy Escrow flow
+        setStatus('paying');
+        const tx = await createEscrowTransaction(
+          publicKey, 
+          new PublicKey(agent.creator_wallet), 
+          taskId, 
+          agent.price
+        );
+        const signature = await sendTransaction(tx, connection);
+        
+        setStatus('verifying');
+        await confirmTx(connection, signature);
+        
+        setStatus('executing');
+        const res = await runAgent(agent.id, JSON.parse(inputData), taskId);
+        setResult(res);
+      }
       
-      // 3. Verification
-      setStatus('verifying');
-      await confirmTx(connection, signature);
-      
-      // 4. Execution (Send task_id to backend)
-      setStatus('executing');
-      const res = await runAgent(agent.id, JSON.parse(inputData), taskId);
-      setResult(res);
       setStatus('done');
     } catch (err: any) {
       console.error(err);
@@ -107,9 +145,56 @@ export default function AgentRunPage() {
                   <p className="text-xs text-zinc-500 uppercase tracking-wider font-bold mb-1">Price per run</p>
                   <p className="text-2xl font-bold text-purple-400">{agent.price} SOL</p>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <ShieldCheck size={14} className="text-green-500" />
-                  <span>Verified Creator: {agent.creator_wallet.slice(0, 8)}...</span>
+
+                <div className="space-y-3">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider font-bold">Payment Method</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setPaymentType('solana_pay')}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                        paymentType === 'solana_pay' 
+                        ? 'border-blue-500 bg-blue-500/10 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.1)]' 
+                        : 'border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:border-zinc-700'
+                      }`}
+                    >
+                      <CreditCard size={20} />
+                      <span className="text-[10px] font-bold uppercase">Solana Pay</span>
+                    </button>
+                    <button
+                      onClick={() => setPaymentType('escrow')}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
+                        paymentType === 'escrow' 
+                        ? 'border-purple-500 bg-purple-500/10 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.1)]' 
+                        : 'border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:border-zinc-700'
+                      }`}
+                    >
+                      <ShieldCheck size={20} />
+                      <span className="text-[10px] font-bold uppercase">Escrow</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 leading-tight">
+                    {paymentType === 'solana_pay' 
+                      ? "Direct payment via Solana Pay. Fast and simple." 
+                      : "Secure multi-sig escrow. Funds released only on success."}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <ShieldCheck size={14} className="text-green-500" />
+                    <span>Verified Creator: {agent.creator_wallet.slice(0, 8)}...</span>
+                  </div>
+                  {agent.mint_address && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-full">
+                      <BadgeCheck size={12} className="text-green-500" />
+                      <span className="text-[10px] font-bold text-green-500 uppercase">SAS Verified</span>
+                    </div>
+                  )}
+                  {agent.risk_score !== undefined && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full">
+                      <span className="text-[10px] font-bold text-blue-400 uppercase">Risk: {(agent.risk_score * 100).toFixed(0)}%</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

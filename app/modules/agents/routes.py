@@ -12,6 +12,9 @@ from app.db.models.models import Task, Payment
 from app.core.dependencies import get_current_user
 from app.modules.agents.validation import validate_agent_code
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -26,10 +29,23 @@ async def run_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
-    # 2. Verify escrow payment on-chain
-    success, msg = await billing_service.verify_solana_payment(req.task_id, agent.price, current_user)
+    # 2. Verify payment on-chain
+    if req.payment_type == "solana_pay":
+        if not req.reference:
+            raise HTTPException(status_code=400, detail="Reference required for Solana Pay")
+        
+        # Verify Solana Pay payment
+        success, msg = await billing_service.verify_solana_pay_payment(
+            req.reference, 
+            agent.price, 
+            billing_service.PLATFORM_WALLET # Or agent.creator_wallet directly if bypassing escrow
+        )
+    else:
+        # Default: Verify custom escrow PDA
+        success, msg = await billing_service.verify_solana_payment(req.task_id, agent.price, current_user)
+    
     if not success:
-        raise HTTPException(status_code=402, detail=f"Escrow verification failed: {msg}")
+        raise HTTPException(status_code=402, detail=f"Payment verification failed: {msg}")
     
     # 3. Create task record (using task_id from frontend)
     db_task = Task(
@@ -59,8 +75,16 @@ async def run_agent(
     
     await db.commit()
 
-    # On-chain settlement: payout if success, refund if failed
-    settle_ok, tx_sig = await billing_service.settle_escrow(req.task_id, agent.creator_wallet, exec_result["success"])
+    # On-chain settlement
+    if req.payment_type == "solana_pay":
+        # For Solana Pay, we might want to payout the creator if funds went to platform
+        # or just log if funds went direct. For now, we simulate payout.
+        if exec_result["success"]:
+            logger.info(f"Task {req.task_id} success. Payout triggered for Solana Pay.")
+            await billing_service.payout_creator(agent.creator_wallet, agent.price)
+    else:
+        # Default: settle custom escrow PDA
+        settle_ok, tx_sig = await billing_service.settle_escrow(req.task_id, agent.creator_wallet, exec_result["success"])
     
     return TaskResponse(
         task_id=req.task_id,

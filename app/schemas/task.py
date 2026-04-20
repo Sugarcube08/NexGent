@@ -6,6 +6,8 @@ class RunRequest(BaseModel):
     agent_id: str
     task_id: str
     input_data: dict
+    reference: Optional[str] = None
+    payment_type: Optional[str] = "escrow" # "escrow" or "solana_pay"
 
 class TaskResponse(BaseModel):
     task_id: str

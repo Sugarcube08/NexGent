@@ -6,6 +6,8 @@ from app.db.session import engine, Base
 from app.modules.auth.routes import router as auth_router
 from app.modules.agents.routes import router as agents_router
 from app.modules.marketplace.routes import router as marketplace_router
+from app.modules.billing.routes import router as billing_router
+from app.modules.auth.middleware import X402PaymentMiddleware
 import logging
 
 # Configure logging
@@ -30,6 +32,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Shoujiki API", lifespan=lifespan)
 
+app.add_middleware(X402PaymentMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -49,6 +53,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(agents_router, prefix="/agents", tags=["agents"])
 app.include_router(marketplace_router, prefix="/marketplace", tags=["marketplace"])
+app.include_router(billing_router, prefix="/billing", tags=["billing"])
 
 @app.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):

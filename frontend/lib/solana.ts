@@ -1,5 +1,6 @@
 import { Transaction, SystemProgram, PublicKey, LAMPORTS_PER_SOL, Connection, TransactionInstruction, Keypair } from '@solana/web3.js';
 import { sha256 } from 'js-sha256';
+import { encodeURL } from '@solana/pay';
 
 export const PROGRAM_ID = new PublicKey("Escrow1111111111111111111111111111111111111");
 
@@ -53,6 +54,17 @@ export const createEscrowTransaction = async (
   });
 
   return new Transaction().add(ix);
+};
+
+export const createSolanaPayURL = (recipient: PublicKey, amount: number, reference: PublicKey, label: string, message: string) => {
+  const url = encodeURL({
+    recipient,
+    amount,
+    reference,
+    label,
+    message,
+  });
+  return url;
 };
 
 export const confirmTx = async (connection: Connection, signature: string) => {

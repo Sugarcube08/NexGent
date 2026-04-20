@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 PROGRAM_ID = Pubkey.from_string("Escrow1111111111111111111111111111111111111")
 platform_keypair = Keypair.from_seed(PLATFORM_SECRET_SEED.encode())
+PLATFORM_WALLET = str(platform_keypair.pubkey())
 
 def get_discriminator(namespace: str, name: str) -> bytes:
     preimage = f"{namespace}:{name}"
@@ -52,6 +53,62 @@ async def verify_solana_payment(task_id: str, expected_amount_sol: float, sender
         except Exception as e:
             logger.error(f"Escrow verification error: {e}")
             return False, f"Verification error: {str(e)}"
+
+async def verify_solana_pay_payment(reference: str, expected_amount_sol: float, recipient_wallet: str):
+    """
+    Verify payment via Solana Pay reference.
+    """
+    async with AsyncClient(SOLANA_RPC_URL) as client:
+        try:
+            ref_pubkey = Pubkey.from_string(reference)
+            
+            # Find signatures for the reference address
+            for i in range(15): # Try for 30 seconds
+                resp = await client.get_signatures_for_address(ref_pubkey)
+                if resp.value:
+                    signature = resp.value[0].signature
+                    # Get transaction details
+                    tx_resp = await client.get_transaction(signature, encoding="jsonParsed", max_supported_transaction_version=0)
+                    if tx_resp.value:
+                        tx = tx_resp.value.transaction
+                        # Check instructions for the transfer
+                        instructions = tx.transaction.message.instructions
+                        
+                        expected_lamports = int(expected_amount_sol * 10**9)
+                        
+                        for ix in instructions:
+                            # Standard system program transfer
+                            if hasattr(ix, 'parsed') and ix.program == "system":
+                                info = ix.parsed.get("info")
+                                if info and info.get("destination") == recipient_wallet:
+                                    amount = info.get("lamports", 0)
+                                    if amount >= expected_lamports * 0.99:
+                                        logger.info(f"Solana Pay payment verified: {signature}")
+                                        return True, str(signature)
+                        
+                        # Handle case where instruction might not be parsed but is a transfer
+                        # (Fallback or different parsing depending on RPC)
+                
+                import asyncio
+                await asyncio.sleep(2)
+            
+            return False, "Solana Pay verification error"
+        except Exception as e:
+            logger.error(f"Solana Pay verification error: {e}")
+            return False, f"Verification error: {str(e)}"
+
+async def payout_creator(developer_wallet: str, amount_sol: float):
+    """
+    Simulate payout to the developer. 
+    In a production Squads integration, this would trigger a multisig transaction.
+    """
+    try:
+        logger.info(f"Triggering payout: {amount_sol} SOL to {developer_wallet}")
+        # In Squads: await squads.transfer(...)
+        return True, "Payout triggered"
+    except Exception as e:
+        logger.error(f"Payout error: {e}")
+        return False, str(e)
 
 async def settle_escrow(task_id: str, agent_creator_wallet: str, success: bool):
     """

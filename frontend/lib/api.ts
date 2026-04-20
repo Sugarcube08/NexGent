@@ -65,11 +65,19 @@ export const loginWallet = async (publicKey: string, signature: string, message:
   return response.data;
 };
 
-export const runAgent = async (agentId: string, inputData: any, taskId: string) => {
+export const runAgent = async (
+  agentId: string, 
+  inputData: any, 
+  taskId: string, 
+  reference?: string, 
+  paymentType: string = "escrow"
+) => {
   const response = await api.post('/agents/run', {
     agent_id: agentId,
     input_data: inputData,
     task_id: taskId,
+    reference,
+    payment_type: paymentType
   });
   return response.data;
 };

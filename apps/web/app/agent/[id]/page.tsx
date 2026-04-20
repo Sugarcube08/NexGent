@@ -185,14 +185,14 @@ export default function AgentRunPage() {
                     <span>Verified Creator: {agent.creator_wallet.slice(0, 8)}...</span>
                   </div>
                   {agent.mint_address && (
-                    <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-full">
-                      <BadgeCheck size={12} className="text-green-500" />
-                      <span className="text-[10px] font-bold text-green-500 uppercase">SAS Verified</span>
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded-full">
+                      <BadgeCheck size={12} className="text-zinc-500" />
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase">Onchain Asset</span>
                     </div>
                   )}
                   {agent.risk_score !== undefined && (
                     <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full">
-                      <span className="text-[10px] font-bold text-blue-400 uppercase">Risk: {(agent.risk_score * 100).toFixed(0)}%</span>
+                      <span className="text-[10px] font-bold text-blue-400 uppercase">Risk (Simulated): {(agent.risk_score * 100).toFixed(0)}%</span>
                     </div>
                   )}
                 </div>

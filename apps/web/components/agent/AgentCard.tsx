@@ -34,15 +34,15 @@ export const AgentCard = ({ agent, onDelete, isDeleting }: AgentCardProps) => {
               {agent.name}
             </h3>
             {agent.mint_address && (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-full w-fit">
-                <BadgeCheck size={10} className="text-green-500" />
-                <span className="text-[10px] font-bold text-green-500 uppercase tracking-tighter">Verified by SAS</span>
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-800 border border-zinc-700 rounded-full w-fit">
+                <BadgeCheck size={10} className="text-zinc-500" />
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">Onchain Asset</span>
               </div>
             )}
             {agent.risk_score !== undefined && (
               <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-full w-fit">
                 <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">
-                  Risk Score: {(agent.risk_score * 100).toFixed(0)}%
+                  Risk (Simulated): {(agent.risk_score * 100).toFixed(0)}%
                 </span>
               </div>
             )}

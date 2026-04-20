@@ -1,5 +1,6 @@
 import { Transaction, SystemProgram, PublicKey, LAMPORTS_PER_SOL, Connection, Keypair } from '@solana/web3.js';
 import { encodeURL } from '@solana/pay';
+import BigNumber from 'bignumber.js';
 
 // Squads V4 Program ID
 const SQUADS_PROGRAM_ID = new PublicKey(process.env.NEXT_PUBLIC_SQUADS_PROGRAM_ID || "SQDS4Byj9s7BfR7atvH9iSnduXW1U9CAdX9rW5L2S8X");
@@ -36,7 +37,7 @@ export const createEscrowTransaction = async (
 export const createSolanaPayURL = (recipient: PublicKey, amount: number, reference: PublicKey, label: string, message: string) => {
   const url = encodeURL({
     recipient,
-    amount,
+    amount: new BigNumber(amount),
     reference,
     label,
     message,

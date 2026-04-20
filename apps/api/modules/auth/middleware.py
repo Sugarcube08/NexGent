@@ -15,9 +15,7 @@ class X402PaymentMiddleware(BaseHTTPMiddleware):
             reference = request.headers.get("X-Payment-Reference")
             
             if not payment_sig and not reference:
-                # We still allow the body-based payment for backward compatibility with the current frontend
-                # but log that the x402 header is missing
-                logger.warning("x402: X-Payment-Signature header missing from /agents/run request")
+                raise HTTPException(status_code=402, detail="Payment Required: x402 header missing")
             
         response = await call_next(request)
         return response

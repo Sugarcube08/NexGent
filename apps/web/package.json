@@ -30,6 +30,7 @@
     "@metaplex-foundation/mpl-core": "^1.8.0",
     "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
     "@solana/pay": "^0.2.6",
+    "bignumber.js": "^9.1.2",
     "@sqds/multisig": "^2.1.4",
     "solana-agent-kit": "^2.0.10",
     "sas-lib": "^1.0.10",

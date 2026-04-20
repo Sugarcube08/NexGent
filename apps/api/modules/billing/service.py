@@ -109,6 +109,45 @@ async def verify_solana_pay_payment(reference: str, expected_amount_sol: float, 
             logger.error(f"Solana Pay verification error: {e}")
             return False, f"Verification error: {str(e)}"
 
+async def verify_transaction_signature(tx_signature: str, expected_amount_sol: float, expected_recipient: str, expected_sender: str):
+    """
+    Verify a specific transaction signature for a transfer of SOL.
+    """
+    async with AsyncClient(SOLANA_RPC_URL) as client:
+        try:
+            # Fetch transaction details
+            tx_resp = await client.get_transaction(
+                tx_signature, 
+                encoding="jsonParsed", 
+                max_supported_transaction_version=0
+            )
+            if not tx_resp.value:
+                return False, "Transaction not found"
+            
+            tx = tx_resp.value.transaction
+            # Verify sender
+            # In simple transfers, the first account is the fee payer and usually the sender
+            sender = str(tx.transaction.message.account_keys[0].pubkey)
+            if sender != expected_sender:
+                return False, f"Sender mismatch. Expected {expected_sender}, got {sender}"
+            
+            # Check instructions for the transfer
+            instructions = tx.transaction.message.instructions
+            expected_lamports = int(expected_amount_sol * 1e9)
+            
+            for ix in instructions:
+                if hasattr(ix, 'parsed') and ix.program == "system":
+                    info = ix.parsed.get("info")
+                    if info and info.get("destination") == expected_recipient:
+                        amount = info.get("lamports", 0)
+                        if amount >= expected_lamports * 0.99:
+                            return True, "Verified"
+            
+            return False, "Transfer instruction to recipient not found in transaction"
+        except Exception as e:
+            logger.error(f"Tx verification error: {e}")
+            return False, str(e)
+
 async def payout_creator(developer_wallet: str, amount_sol: float):
     """
     Simulate payout to the developer. 

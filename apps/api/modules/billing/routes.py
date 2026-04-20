@@ -22,8 +22,15 @@ async def deposit_funds(
     """
     Lobster-style deposit: User pays on-chain, backend updates internal balance.
     """
-    # 1. Verify transaction (simplified for demo)
-    # In production, check that tx_signature is a transfer to PLATFORM_WALLET for 'amount'
+    # 1. Verify transaction on-chain
+    success, msg = await billing_service.verify_transaction_signature(
+        req.tx_signature, 
+        req.amount, 
+        billing_service.PLATFORM_WALLET,
+        current_user
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail=f"Transaction verification failed: {msg}")
     
     # 2. Update balance
     result = await db.execute(

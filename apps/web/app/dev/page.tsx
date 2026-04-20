@@ -99,7 +99,7 @@ agent = Agent()`,
     }
   };
 
-  const handleDeploy = async () => {
+  const handleDeploy = () => {
     if (!isAuthenticated) return;
     
     if (!metadata.id.trim() || !metadata.name.trim()) {
@@ -107,22 +107,16 @@ agent = Agent()`,
       return;
     }
 
-    setError('');
-    setLoading(true);
-    try {
-      await deployAgent({
-        ...metadata,
-        files,
-        requirements,
-        entrypoint,
-        version: 'v' + Date.now()
-      });
-      router.push('/dashboard/my-agents');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Deployment failed');
-    } finally {
-      setLoading(false);
-    }
+    const draft = {
+      ...metadata,
+      files,
+      requirements,
+      entrypoint,
+      version: 'v' + Date.now()
+    };
+    
+    localStorage.setItem('shoujiki_draft', JSON.stringify(draft));
+    router.push('/deploy');
   };
 
   if (!connected) {

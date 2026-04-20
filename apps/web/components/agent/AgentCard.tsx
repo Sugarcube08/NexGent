@@ -3,8 +3,8 @@
 import React from 'react';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { useRouter } from 'next/navigation';
-import { Play, User, Clock, Trash2, ShieldCheck, BadgeCheck } from 'lucide-react';
+import Link from 'next/link';
+import { Play, User, Trash2, BadgeCheck } from 'lucide-react';
 
 interface AgentCardProps {
   agent: {
@@ -21,8 +21,6 @@ interface AgentCardProps {
 }
 
 export const AgentCard = ({ agent, onDelete, isDeleting }: AgentCardProps) => {
-  const router = useRouter();
-
   const truncatedWallet = `${agent.creator_wallet.slice(0, 4)}...${agent.creator_wallet.slice(-4)}`;
 
   return (
@@ -64,14 +62,26 @@ export const AgentCard = ({ agent, onDelete, isDeleting }: AgentCardProps) => {
       </CardContent>
 
       <CardFooter className="flex gap-2">
-        <Button 
-          className="flex-1 gap-2" 
-          variant="secondary"
-          onClick={() => router.push(`/dashboard/marketplace/${agent.id}`)}
-        >
-          <Play size={16} fill="currentColor" />
-          Configure & Run
-        </Button>
+        {agent.id ? (
+          <Link href={`/agent/${agent.id}`} className="flex-1">
+            <Button 
+              className="w-full gap-2" 
+              variant="secondary"
+            >
+              <Play size={16} fill="currentColor" />
+              Configure & Run
+            </Button>
+          </Link>
+        ) : (
+          <Button 
+            className="flex-1 gap-2 opacity-50 cursor-not-allowed" 
+            variant="secondary"
+            disabled
+          >
+            <Play size={16} fill="currentColor" />
+            Invalid Agent
+          </Button>
+        )}
         {onDelete && (
           <Button
             variant="outline"

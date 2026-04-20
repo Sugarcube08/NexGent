@@ -19,7 +19,7 @@ export default function MyAgentsPage() {
   useEffect(() => {
     if (isAuthenticated) {
       getMyAgents()
-        .then(setAgents)
+        .then(data => setAgents(data.filter((a: any) => !!a.id)))
         .catch(console.error)
         .finally(() => setLoading(false));
     } else {
@@ -75,7 +75,7 @@ export default function MyAgentsPage() {
           <p className="text-zinc-400">Manage your deployed AI agents and track their performance.</p>
         </div>
         
-        <Button onClick={() => router.push('/dashboard/deploy')} className="gap-2">
+        <Button onClick={() => router.push('/dev')} className="gap-2">
           <Plus size={20} />
           New Agent
         </Button>
@@ -100,7 +100,7 @@ export default function MyAgentsPage() {
       ) : (
         <div className="text-center py-24 bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-800 flex flex-col items-center gap-4">
           <p className="text-zinc-500">You haven't deployed any agents yet.</p>
-          <Button variant="outline" onClick={() => router.push('/dashboard/deploy')}>
+          <Button variant="outline" onClick={() => router.push('/dev')}>
             Deploy your first agent
           </Button>
         </div>

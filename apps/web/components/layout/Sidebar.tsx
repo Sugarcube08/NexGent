@@ -12,10 +12,10 @@ function cn(...inputs: ClassValue[]) {
 }
 
 const navItems = [
-  { label: 'Marketplace', href: '/dashboard/marketplace', icon: ShoppingCart },
-  { label: 'My Agents', href: '/dashboard/my-agents', icon: User2 },
-  { label: 'Deploy Agent', href: '/dashboard/deploy', icon: Code2 },
-  { label: 'Activity', href: '/dashboard/activity', icon: History },
+  { label: 'Marketplace', href: '/', icon: ShoppingCart },
+  { label: 'My Agents', href: '/my-agents', icon: User2 },
+  { label: 'Dev Space', href: '/dev', icon: Code2 },
+  { label: 'Deploy Agent', href: '/deploy', icon: LayoutDashboard },
 ];
 
 export const Sidebar = () => {

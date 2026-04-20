@@ -70,15 +70,28 @@ export const runAgent = async (
   inputData: any, 
   taskId: string, 
   reference?: string, 
-  paymentType: string = "escrow"
+  paymentType: string = "escrow",
+  signatureBase64?: string,
+  publicKeyBase58?: string
 ) => {
-  const response = await api.post('/agents/run', {
+  const payload = JSON.stringify({
     agent_id: agentId,
     input_data: inputData,
     task_id: taskId,
     reference,
     payment_type: paymentType
   });
+
+  const headers: any = {
+    'Content-Type': 'application/json'
+  };
+
+  if (signatureBase64 && publicKeyBase58) {
+    headers['X-Payment-Signature'] = signatureBase64;
+    headers['X-Payment-Pubkey'] = publicKeyBase58;
+  }
+
+  const response = await api.post('/agents/run', payload, { headers });
   return response.data;
 };
 

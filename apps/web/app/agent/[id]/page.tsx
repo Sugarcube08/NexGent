@@ -16,7 +16,7 @@ export default function AgentRunPage() {
   const { id } = useParams();
   const router = useRouter();
   const { connection } = useConnection();
-  const { sendTransaction } = useWallet();
+  const { sendTransaction, signMessage } = useWallet();
   const { isAuthenticated, login, connected, publicKey } = useWalletAuth();
   
   const [agent, setAgent] = useState<any>(null);
@@ -35,31 +35,19 @@ export default function AgentRunPage() {
   }, [id]);
 
   const handleRun = async () => {
-    if (!publicKey || !connected || !isAuthenticated) return;
+    if (!publicKey || !connected || !isAuthenticated || !signMessage) return;
     
     setError('');
     setResult(null);
     try {
       const taskId = crypto.randomUUID();
-      
+      let referenceBase58;
+
       if (paymentType === 'solana_pay') {
         setStatus('paying');
-        // Generate a random reference keypair
         const reference = Keypair.generate().publicKey;
+        referenceBase58 = reference.toBase58();
         
-        const payUrl = createSolanaPayURL(
-          new PublicKey(PLATFORM_WALLET),
-          agent.price,
-          reference,
-          "Shoujiki Agent Run",
-          `Executing agent ${agent.name}`
-        );
-
-        // For demo/hackathon, we'll open the URL in a new tab or show it
-        // Ideally, we use the wallet-adapter to sign a transaction derived from this or use the mobile wallet adapter
-        // Since we are in a web environment, we can also just create the transaction manually to match Solana Pay spec
-        
-        // Let's create a standard transfer transaction with the reference
         const { SystemProgram, Transaction } = await import('@solana/web3.js');
         const tx = new Transaction().add(
           SystemProgram.transfer({
@@ -68,19 +56,13 @@ export default function AgentRunPage() {
             lamports: agent.price * 1e9,
           })
         );
-        // Add the reference to the instruction for verification
         tx.instructions[0].keys.push({ pubkey: reference, isSigner: false, isWritable: false });
         
         const signature = await sendTransaction(tx, connection);
         
         setStatus('verifying');
         await confirmTx(connection, signature);
-        
-        setStatus('executing');
-        const res = await runAgent(agent.id, JSON.parse(inputData), taskId, reference.toBase58(), 'solana_pay');
-        setResult(res);
       } else {
-        // Legacy Escrow flow
         setStatus('paying');
         const tx = await createEscrowTransaction(
           publicKey, 
@@ -92,12 +74,32 @@ export default function AgentRunPage() {
         
         setStatus('verifying');
         await confirmTx(connection, signature);
-        
-        setStatus('executing');
-        const res = await runAgent(agent.id, JSON.parse(inputData), taskId);
-        setResult(res);
       }
       
+      setStatus('executing');
+      
+      const payloadStr = JSON.stringify({
+        agent_id: agent.id,
+        input_data: JSON.parse(inputData),
+        task_id: taskId,
+        reference: referenceBase58,
+        payment_type: paymentType
+      });
+      
+      const msgBytes = new TextEncoder().encode(payloadStr);
+      const signatureBytes = await signMessage(msgBytes);
+      const signatureBase64 = Buffer.from(signatureBytes).toString('base64');
+      
+      const res = await runAgent(
+        agent.id, 
+        JSON.parse(inputData), 
+        taskId, 
+        referenceBase58, 
+        paymentType,
+        signatureBase64,
+        publicKey.toBase58()
+      );
+      setResult(res);
       setStatus('done');
     } catch (err: any) {
       console.error(err);
@@ -115,7 +117,7 @@ export default function AgentRunPage() {
   if (!agent) return (
     <div className="flex flex-col items-center justify-center py-24 gap-4">
       <p className="text-zinc-400">Agent not found.</p>
-      <Button onClick={() => router.push('/dashboard/marketplace')}>Back to Marketplace</Button>
+      <Button onClick={() => router.push('/')}>Back to Marketplace</Button>
     </div>
   );
 

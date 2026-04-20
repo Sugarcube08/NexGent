@@ -3,16 +3,22 @@ import { NextResponse, NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  if (pathname === '/agent' || pathname === '/agents') {
-    return NextResponse.redirect(new URL('/dashboard/marketplace', request.url));
+  // 1. Redirect plural root to marketplace
+  if (pathname === '/agents' || pathname === '/agent') {
+    return NextResponse.redirect(new URL('/', request.url));
   }
   
-  if (pathname.startsWith('/agent/') || pathname.startsWith('/agents/')) {
+  // 2. Redirect plural agent IDs to singular agent IDs (the functional route)
+  if (pathname.startsWith('/agents/')) {
     const segments = pathname.split('/');
     const id = segments[2];
-    return NextResponse.redirect(new URL(`/dashboard/marketplace/${id}`, request.url));
+    if (id) {
+      return NextResponse.redirect(new URL(`/agent/${id}`, request.url));
+    }
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
+  // Allow singular /agent and /agent/[id] to pass through
   return NextResponse.next();
 }
 

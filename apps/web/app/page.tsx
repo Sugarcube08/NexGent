@@ -1,115 +1,103 @@
 "use client";
 
-import React from 'react';
-import { Button } from '@/components/ui/Button';
-import { useRouter } from 'next/navigation';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { Rocket, Shield, Zap, ArrowRight, Code } from 'lucide-react';
-import NoSSR from '@/components/ui/NoSSR';
+import React, { useEffect, useState } from 'react';
+import { getAgents } from '@/lib/api';
+import { AgentCard } from '@/components/agent/AgentCard';
+import { Loader2, Search } from 'lucide-react';
+import { Input } from '@/components/ui/Input';
 
-export default function LandingPage() {
-  const router = useRouter();
-  const { connected } = useWallet();
+export default function MarketplacePage() {
+  const [agents, setAgents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filterVerified, setFilterVerified] = useState(false);
+  const [category, setCategory] = useState('all');
+
+  useEffect(() => {
+    getAgents()
+      .then(setAgents)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filteredAgents = agents.filter((a: any) => {
+    if (!a.id) return false;
+    const matchesSearch = a.name.toLowerCase().includes(search.toLowerCase()) || 
+                         a.description?.toLowerCase().includes(search.toLowerCase());
+    const matchesVerified = filterVerified ? !!a.mint_address : true;
+    return matchesSearch && matchesVerified;
+  });
+
+  const categories = [
+    { id: 'all', label: 'All Agents' },
+    { id: 'trading', label: 'Trading' },
+    { id: 'utility', label: 'Utility' },
+    { id: 'social', label: 'Social' },
+  ];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-blue-500/30">
-      {/* Navigation */}
-      <nav className="flex items-center justify-between px-8 py-6 max-w-7xl mx-auto">
-        <div className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-600">
-          Shoujiki
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Marketplace</h1>
+          <p className="text-zinc-400">Discover and run high-performance AI agents on Solana.</p>
         </div>
-        <div className="flex items-center gap-6">
-          <a href="#" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Documentation</a>
-          <NoSSR>
-            <WalletMultiButton />
-          </NoSSR>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative px-8 pt-20 pb-32 max-w-7xl mx-auto text-center overflow-hidden">
-        {/* Background Glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-blue-600/10 blur-[120px] rounded-full -z-10" />
         
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-400 mb-8">
-          <span className="flex h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-          Beta now live on Solana Devnet
-        </div>
-
-        <h1 className="text-6xl md:text-7xl font-extrabold tracking-tight mb-8 leading-[1.1]">
-          The Decentralized <br />
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500">
-            AI Agent Marketplace
-          </span>
-        </h1>
-
-        <p className="text-xl text-zinc-400 max-w-2xl mx-auto mb-12 leading-relaxed">
-          Deploy, discover, and execute high-performance AI agents with on-chain payments and sandboxed security. Built for the future of autonomous computing.
-        </p>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button 
-            size="lg" 
-            className="w-full sm:w-auto px-8 h-14 text-lg gap-2 shadow-[0_0_30px_rgba(37,99,235,0.3)]"
-            onClick={() => router.push('/dashboard/marketplace')}
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <button
+            onClick={() => setFilterVerified(!filterVerified)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
+              filterVerified 
+              ? 'bg-green-500/10 border-green-500/50 text-green-500' 
+              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+            }`}
           >
-            Enter Marketplace
-            <ArrowRight size={20} />
-          </Button>
-          <Button 
-            variant="outline" 
-            size="lg" 
-            className="w-full sm:w-auto px-8 h-14 text-lg gap-2"
-            onClick={() => window.open('https://github.com', '_blank')}
+            Verified Only
+          </button>
+          <div className="relative w-full md:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
+            <Input 
+              placeholder="Search agents..." 
+              className="pl-10"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => setCategory(cat.id)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+              category === cat.id 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300'
+            }`}
           >
-            <Code size={20} />
-            View Source
-          </Button>
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <Loader2 className="animate-spin text-blue-500" size={40} />
+          <p className="text-zinc-500 font-medium">Loading agents...</p>
         </div>
-      </section>
-
-      {/* Features Grid */}
-      <section className="px-8 py-24 max-w-7xl mx-auto border-t border-zinc-900">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-          <div className="space-y-4 p-8 rounded-2xl bg-zinc-900/30 border border-zinc-800/50">
-            <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
-              <Zap size={24} fill="currentColor" />
-            </div>
-            <h3 className="text-xl font-bold">Instant Execution</h3>
-            <p className="text-zinc-400 leading-relaxed text-sm">
-              Connect your wallet and run agents instantly. Payments are handled via Solana for micro-second finality and ultra-low fees.
-            </p>
-          </div>
-
-          <div className="space-y-4 p-8 rounded-2xl bg-zinc-900/30 border border-zinc-800/50">
-            <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
-              <Shield size={24} />
-            </div>
-            <h3 className="text-xl font-bold">Secure Sandboxing</h3>
-            <p className="text-zinc-400 leading-relaxed text-sm">
-              All agent code runs in isolated, resource-limited environments. Your data and privacy are protected by default.
-            </p>
-          </div>
-
-          <div className="space-y-4 p-8 rounded-2xl bg-zinc-900/30 border border-zinc-800/50">
-            <div className="w-12 h-12 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-400">
-              <Rocket size={24} />
-            </div>
-            <h3 className="text-xl font-bold">Developer First</h3>
-            <p className="text-zinc-400 leading-relaxed text-sm">
-              Deploy agents using pure Python. Monetize your AI models directly from the UI without complex backend infrastructure.
-            </p>
-          </div>
+      ) : filteredAgents.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredAgents.map((agent: any) => (
+            <AgentCard key={agent.id} agent={agent} />
+          ))}
         </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="px-8 py-12 max-w-7xl mx-auto text-center border-t border-zinc-900">
-        <p className="text-zinc-500 text-sm">
-          &copy; 2026 Shoujiki. Built with ❤️ on Solana.
-        </p>
-      </footer>
+      ) : (
+        <div className="text-center py-24 bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-800">
+          <p className="text-zinc-500">No agents found matching your search.</p>
+        </div>
+      )}
     </div>
   );
 }

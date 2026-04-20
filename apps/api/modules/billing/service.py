@@ -63,8 +63,8 @@ async def verify_solana_payment(task_id: str, expected_amount_sol: float, sender
             
             return False, "Matching transaction not found on-chain"
         except Exception as e:
-            logger.error(f"Payment verification error: {e}")
-            return False, f"Verification error: {str(e)}"
+            logger.error(f"Payment verification error for task {task_id}: {str(e)}", exc_info=True)
+            return False, f"Verification error (RPC): {str(e)}"
 
 async def verify_solana_pay_payment(reference: str, expected_amount_sol: float, recipient_wallet: str):
     """
@@ -106,8 +106,8 @@ async def verify_solana_pay_payment(reference: str, expected_amount_sol: float, 
             
             return False, "Solana Pay verification error"
         except Exception as e:
-            logger.error(f"Solana Pay verification error: {e}")
-            return False, f"Verification error: {str(e)}"
+            logger.error(f"Solana Pay verification error for ref {reference}: {str(e)}", exc_info=True)
+            return False, f"Solana Pay Verification error (RPC): {str(e)}"
 
 async def verify_transaction_signature(tx_signature: str, expected_amount_sol: float, expected_recipient: str, expected_sender: str):
     """
@@ -179,8 +179,9 @@ async def settle_escrow(task_id: str, agent_creator_wallet: str, success: bool, 
         kp = Keypair.from_seed(PLATFORM_SECRET_SEED.encode())
         secret_key_bs58 = base58.b58encode(bytes(kp)).decode('utf-8')
         
-        # Multsig address for the platform (Should be in env in production)
-        multisig_address = "SQDS_PLATFORM_MULTISIG_ADDRESS" 
+        # Multsig address for the platform
+        from backend.core.config import SQUADS_MULTISIG_PDA
+        multisig_address = SQUADS_MULTISIG_PDA
 
         script_path = os.path.join(os.path.dirname(__file__), "squads_action.js")
         

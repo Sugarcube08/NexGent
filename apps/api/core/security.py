@@ -21,5 +21,12 @@ def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except Exception:
+    except jwt.ExpiredSignatureError:
+        print("Token has expired")
+        return None
+    except jwt.JWTError as e:
+        print(f"JWT validation error: {e}")
+        return None
+    except Exception as e:
+        print(f"Unexpected token verification error: {e}")
         return None

@@ -33,8 +33,8 @@ def validate_agent_code(code: str):
             for item in node.body:
                 if isinstance(item, ast.FunctionDef) and item.name == "run":
                     args = [arg.arg for arg in item.args.args]
+                    # 'run(self, data)' or 'run(self, input_data)' should have at least 2 args
                     if len(args) >= 2:
-                        class_names_with_run.add(node.name)
                         has_run_method = True
 
         # 3. Check for 'agent' instance assignment

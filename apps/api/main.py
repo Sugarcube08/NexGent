@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Verify environment
+    from backend.core.security import SECRET_KEY
+    if SECRET_KEY == "shoujiki-secret-key-change-in-production":
+        logger.warning("SECRET_KEY is using the default value. Token validation may fail if .env is not loaded.")
+    else:
+        logger.info("SECRET_KEY loaded from environment.")
+
     # Startup: Create tables
     try:
         async with engine.begin() as conn:
@@ -32,7 +39,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Shoujiki API", lifespan=lifespan)
 
-app.add_middleware(X402PaymentMiddleware)
+# app.add_middleware(X402PaymentMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

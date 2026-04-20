@@ -169,13 +169,13 @@ export default function AgentRunPage() {
                       }`}
                     >
                       <ShieldCheck size={20} />
-                      <span className="text-[10px] font-bold uppercase">Escrow</span>
+                      <span className="text-[10px] font-bold uppercase">Squads Vault</span>
                     </button>
                   </div>
                   <p className="text-[10px] text-zinc-500 leading-tight">
                     {paymentType === 'solana_pay' 
                       ? "Direct payment via Solana Pay. Fast and simple." 
-                      : "Secure multi-sig escrow. Funds released only on success."}
+                      : "Secure Squads multi-sig vault. Funds released only on success."}
                   </p>
                 </div>
 
@@ -241,8 +241,8 @@ export default function AgentRunPage() {
                     onClick={handleRun}
                     isLoading={status !== 'idle' && status !== 'done'}
                   >
-                    {status === 'paying' ? 'Funding Escrow...' :
-                     status === 'verifying' ? 'Verifying Escrow...' :
+                    {status === 'paying' ? 'Funding Vault...' :
+                     status === 'verifying' ? 'Verifying Vault...' :
                      status === 'executing' ? 'Executing Agent...' :
                      'Pay & Run Agent'}
                   </Button>

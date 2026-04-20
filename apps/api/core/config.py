@@ -12,4 +12,5 @@ PLATFORM_WALLET = os.getenv("PLATFORM_WALLET", "") # Will be derived from seed i
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
 SANDBOX_URL = os.getenv("SANDBOX_URL", "http://sandbox:8001")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./test.db")
-PROGRAM_ID = os.getenv("PROGRAM_ID", "Escrow1111111111111111111111111111111111111")
+SQUADS_PROGRAM_ID = os.getenv("SQUADS_PROGRAM_ID", "SQDS4Byj9s7BfR7atvH9iSnduXW1U9CAdX9rW5L2S8X")
+# Squads Multisig Program ID: SQDS4Byj9s7BfR7atvH9iSnduXW1U9CAdX9rW5L2S8X (Mainnet/Devnet standard)

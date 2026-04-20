@@ -83,8 +83,13 @@ async def run_agent(
             logger.info(f"Task {req.task_id} success. Payout triggered for Solana Pay.")
             await billing_service.payout_creator(agent.creator_wallet, agent.price)
     else:
-        # Default: settle custom escrow PDA
-        settle_ok, tx_sig = await billing_service.settle_escrow(req.task_id, agent.creator_wallet, exec_result["success"])
+        # Default: settle custom escrow PDA (Now Squads)
+        settle_ok, tx_sig = await billing_service.settle_escrow(
+            req.task_id, 
+            agent.creator_wallet, 
+            exec_result["success"],
+            agent.price
+        )
     
     return TaskResponse(
         task_id=req.task_id,

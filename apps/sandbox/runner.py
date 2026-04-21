@@ -29,7 +29,7 @@ def run_agent_code(files: dict, requirements: list, entrypoint: str, input_data:
         deps_path = os.path.join(tmpdir, ".deps")
         if requirements:
             pip_res = subprocess.run(
-                ["pip", "install", "-r", "requirements.txt", "-t", ".deps"],
+                ["python3", "-m", "pip", "install", "-r", "requirements.txt", "-t", ".deps"],
                 cwd=tmpdir,
                 capture_output=True,
                 text=True,

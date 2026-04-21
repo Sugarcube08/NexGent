@@ -1,7 +1,7 @@
 import ast
 
-FORBIDDEN_IMPORTS = {"os", "sys", "subprocess", "socket", "requests", "httpx", "urllib", "builtins", "importlib"}
-ALLOWED_IMPORTS = {"math", "time", "json", "datetime", "random", "abc", "typing", "collections", "itertools", "functools", "re"}
+FORBIDDEN_IMPORTS = {"os", "sys", "subprocess", "socket", "builtins", "importlib", "shutil", "pathlib", "pty", "multiprocessing", "threading"}
+ALLOWED_IMPORTS = {"math", "time", "json", "datetime", "random", "abc", "typing", "collections", "itertools", "functools", "re", "requests", "httpx", "urllib", "aiohttp", "asyncio", "pydantic", "bs4", "openai", "anthropic", "langchain", "solana", "solders"}
 
 def validate_agent_code(code: str):
     try:

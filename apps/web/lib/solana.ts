@@ -31,7 +31,7 @@ export const createEscrowTransaction = async (
   const reference = Keypair.generate().publicKey;
   tx.instructions[0].keys.push({ pubkey: reference, isSigner: false, isWritable: false });
 
-  return tx;
+  return { tx, reference };
 };
 
 export const createSolanaPayURL = (recipient: PublicKey, amount: number, reference: PublicKey, label: string, message: string) => {

@@ -22,11 +22,11 @@ This system is strictly configured for **Solana Devnet**.
 Shoujiki utilizes a high-performance, security-first stack:
 
 - **Metaplex Core Assets**: Every agent is minted as a Metaplex Core asset, providing a standardized, lightweight, and composable on-chain identity.
-- **Squads V4 Multisig**: Platform revenue and developer payouts are secured via Squads multisig vaults, ensuring transparent and trustless settlement.
-- **Backend (FastAPI)**: Orchestrates the registry, Metaplex minting, and Squads action execution.
-- **Frontend (Next.js)**: A sleek dashboard with deep wallet integration and real-time transaction tracking.
-- **Secure Sandbox (Docker)**: Agents execute in a zero-trust environment with AST-level static analysis and network lockdowns.
-- **Python SDK**: A comprehensive toolkit for developers to package, validate, and deploy agents seamlessly.
+- **Direct On-chain Settlement**: Payments are verified strictly using transaction signatures and unique references. Successful executions trigger automatic payouts to creators from the platform vault.
+- **Backend (FastAPI + arq)**: Orchestrates the registry, Metaplex minting, and asynchronous task execution via a robust Redis-backed worker pool.
+- **Frontend (Next.js)**: A sleek dashboard with real-time task polling and secure wallet interactions.
+- **Hardened Sandbox (Docker)**: Agents execute in a zero-trust environment with AST-level static analysis, network isolation (`unshare -n`), and strict resource limits (CPU, memory, file size, processes).
+- **Verifiable Execution Receipts**: Every agent run generates a signed receipt containing input/output hashes for auditability.
 
 ---
 

@@ -41,7 +41,8 @@ export default function AgentRunPage() {
     setResult(null);
     try {
       const taskId = crypto.randomUUID();
-      let referenceBase58;
+      let referenceBase58 = '';
+      let txSignature = '';
 
       if (paymentType === 'solana_pay') {
         setStatus('paying');
@@ -58,22 +59,23 @@ export default function AgentRunPage() {
         );
         tx.instructions[0].keys.push({ pubkey: reference, isSigner: false, isWritable: false });
         
-        const signature = await sendTransaction(tx, connection);
+        txSignature = await sendTransaction(tx, connection);
         
         setStatus('verifying');
-        await confirmTx(connection, signature);
+        await confirmTx(connection, txSignature);
       } else {
         setStatus('paying');
-        const tx = await createEscrowTransaction(
+        const { tx, reference } = await createEscrowTransaction(
           publicKey, 
           new PublicKey(agent.creator_wallet), 
           taskId, 
           agent.price
         );
-        const signature = await sendTransaction(tx, connection);
+        referenceBase58 = reference.toBase58();
+        txSignature = await sendTransaction(tx, connection);
         
         setStatus('verifying');
-        await confirmTx(connection, signature);
+        await confirmTx(connection, txSignature);
       }
       
       setStatus('executing');
@@ -90,17 +92,42 @@ export default function AgentRunPage() {
       const signatureBytes = await signMessage(msgBytes);
       const signatureBase64 = Buffer.from(signatureBytes).toString('base64');
       
-      const res = await runAgent(
+      const runRes = await runAgent(
         agent.id, 
         JSON.parse(inputData), 
         taskId, 
         referenceBase58, 
         paymentType,
         signatureBase64,
-        publicKey.toBase58()
+        publicKey.toBase58(),
+        txSignature // This is the tx signature
       );
-      setResult(res);
-      setStatus('done');
+
+      // Start polling for result
+      setStatus('executing');
+      let completed = false;
+      let attempts = 0;
+      const maxAttempts = 30; // 30 seconds poll
+
+      while (!completed && attempts < maxAttempts) {
+        const task = await import('@/lib/api').then(m => m.getTask(taskId));
+        if (task && (task.status === 'completed' || task.status === 'failed')) {
+          setResult(task.result);
+          setStatus('done');
+          completed = true;
+          if (task.status === 'failed') {
+            setError(task.result || 'Execution failed');
+          }
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          attempts++;
+        }
+      }
+
+      if (!completed) {
+        setError('Task is taking longer than expected. Check your dashboard later.');
+        setStatus('done');
+      }
     } catch (err: any) {
       console.error(err);
       setError(err.response?.data?.detail || err.message || 'Execution failed');

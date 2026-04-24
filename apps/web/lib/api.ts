@@ -72,15 +72,17 @@ export const runAgent = async (
   reference?: string, 
   paymentType: string = "escrow",
   signatureBase64?: string,
-  publicKeyBase58?: string
+  publicKeyBase58?: string,
+  txSignature?: string
 ) => {
-  const payload = JSON.stringify({
+  const payload = {
     agent_id: agentId,
     input_data: inputData,
     task_id: taskId,
     reference,
-    payment_type: paymentType
-  });
+    payment_type: paymentType,
+    signature: txSignature
+  };
 
   const headers: any = {
     'Content-Type': 'application/json'
@@ -93,6 +95,13 @@ export const runAgent = async (
 
   const response = await api.post('/agents/run', payload, { headers });
   return response.data;
+};
+
+export const getTask = async (taskId: string) => {
+  const response = await api.get(`/agents/tasks`);
+  // Find the specific task in the history for now, or add a specific endpoint if needed.
+  const tasks = response.data;
+  return tasks.find((t: any) => t.id === taskId);
 };
 
 export default api;

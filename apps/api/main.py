@@ -8,11 +8,17 @@ from backend.modules.auth.routes import router as auth_router
 from backend.modules.agents.routes import router as agents_router
 from backend.modules.billing.routes import router as billing_router
 from backend.modules.auth.middleware import X402PaymentMiddleware
+from arq import create_pool
+from arq.connections import RedisSettings
+import os
 import logging
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,6 +28,10 @@ async def lifespan(app: FastAPI):
         logger.warning("SECRET_KEY is using the default value. Token validation may fail if .env is not loaded.")
     else:
         logger.info("SECRET_KEY loaded from environment.")
+
+    # Initialize Redis pool for background tasks
+    app.state.redis = await create_pool(RedisSettings(host=REDIS_HOST, port=REDIS_PORT))
+    logger.info("Redis pool initialized")
 
     # Startup: Create tables
     try:

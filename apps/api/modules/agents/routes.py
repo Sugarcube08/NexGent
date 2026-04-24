@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
@@ -20,6 +20,7 @@ router = APIRouter()
 
 @router.post("/run", response_model=TaskResponse)
 async def run_agent(
+    request: Request,
     req: RunRequest,
     db: AsyncSession = Depends(get_db),
     current_user: str = Depends(get_current_user)
@@ -30,19 +31,17 @@ async def run_agent(
         raise HTTPException(status_code=404, detail="Agent not found")
     
     # 2. Verify payment on-chain
-    if req.payment_type == "solana_pay":
-        if not req.reference:
-            raise HTTPException(status_code=400, detail="Reference required for Solana Pay")
-        
-        # Verify Solana Pay payment
-        success, msg = await billing_service.verify_solana_pay_payment(
-            req.reference, 
-            agent.price, 
-            billing_service.PLATFORM_WALLET # Or agent.creator_wallet directly if bypassing escrow
-        )
-    else:
-        # Default: Verify custom escrow PDA
-        success, msg = await billing_service.verify_solana_payment(req.task_id, agent.price, current_user)
+    if not req.signature:
+        raise HTTPException(status_code=400, detail="Transaction signature required")
+    if not req.reference:
+        raise HTTPException(status_code=400, detail="Payment reference required")
+
+    success, msg = await billing_service.verify_solana_payment(
+        req.signature,
+        agent.price,
+        current_user,
+        req.reference
+    )
     
     if not success:
         raise HTTPException(status_code=402, detail=f"Payment verification failed: {msg}")
@@ -53,49 +52,27 @@ async def run_agent(
         agent_id=agent.id,
         user_wallet=current_user,
         input_data=str(req.input_data),
-        status="running"
+        status="queued"
     )
     db.add(db_task)
     await db.commit()
 
-    # 4. Execute in sandbox
-    current_ver = next((v for v in agent.versions if v['version'] == agent.current_version), agent.versions[-1])
-    exec_result = await execute_in_sandbox(
-        files=current_ver['files'],
-        requirements=current_ver['requirements'],
-        entrypoint=current_ver['entrypoint'],
-        input_data=req.input_data
+    # 4. Enqueue in background worker
+    redis = request.app.state.redis
+    await redis.enqueue_job(
+        'run_agent_task',
+        task_id=req.task_id,
+        agent_id=agent.id,
+        input_data=req.input_data,
+        creator_wallet=agent.creator_wallet,
+        price=agent.price
     )
-    
-    # 5. Update task and settle escrow on-chain
-    db_task.status = "completed" if exec_result["success"] else "failed"
-    db_task.result = exec_result["output"]
-    if not exec_result["success"]:
-        db_task.result = exec_result["error"]
-    
-    await db.commit()
-
-    # On-chain settlement
-    if req.payment_type == "solana_pay":
-        # For Solana Pay, we might want to payout the creator if funds went to platform
-        # or just log if funds went direct. For now, we simulate payout.
-        if exec_result["success"]:
-            logger.info(f"Task {req.task_id} success. Payout triggered for Solana Pay.")
-            await billing_service.payout_creator(agent.creator_wallet, agent.price)
-    else:
-        # Default: settle custom escrow PDA (Now Squads)
-        settle_ok, tx_sig = await billing_service.settle_escrow(
-            req.task_id, 
-            agent.creator_wallet, 
-            exec_result["success"],
-            agent.price
-        )
     
     return TaskResponse(
         task_id=req.task_id,
-        status=db_task.status,
-        result=db_task.result if exec_result["success"] else None,
-        error=exec_result["error"] if not exec_result["success"] else None
+        status="queued",
+        result=None,
+        error=None
     )
 
 @router.post("/test")

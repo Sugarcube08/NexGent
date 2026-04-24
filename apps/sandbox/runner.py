@@ -10,8 +10,16 @@ def set_limits():
     resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
     # Limit CPU time to 5 seconds
     resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
+    # Limit file size to 1MB
+    resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))
+    # Limit number of processes to 10
+    resource.setrlimit(resource.RLIMIT_NPROC, (10, 10))
 
 def run_agent_code(files: dict, requirements: list, entrypoint: str, input_data: str):
+    # EMERGENCY: Kill dynamic pip install
+    if requirements:
+        return False, "", "Dynamic dependency installation is disabled for security. Use pre-installed packages."
+
     with tempfile.TemporaryDirectory() as tmpdir:
         # 1. Write files
         for filename, content in files.items():
@@ -20,23 +28,10 @@ def run_agent_code(files: dict, requirements: list, entrypoint: str, input_data:
             with open(file_path, "w") as f:
                 f.write(content)
         
-        # 2. Write requirements.txt and install dependencies
+        # 2. Write requirements.txt (for reference only)
         req_path = os.path.join(tmpdir, "requirements.txt")
         with open(req_path, "w") as f:
             f.write("\n".join(requirements))
-        
-        # Install to a local deps folder to stay isolated
-        deps_path = os.path.join(tmpdir, ".deps")
-        if requirements:
-            pip_res = subprocess.run(
-                ["python3", "-m", "pip", "install", "-r", "requirements.txt", "-t", ".deps"],
-                cwd=tmpdir,
-                capture_output=True,
-                text=True,
-                timeout=60 # Give pip some time
-            )
-            if pip_res.returncode != 0:
-                return False, "", f"Dependency installation failed:\n{pip_res.stderr}"
         
         # 3. Create input file
         in_path = os.path.join(tmpdir, "input.json")
@@ -94,8 +89,12 @@ except Exception as e:
             f.write(wrapper_code)
 
         try:
+            # unshare -n requires CAP_SYS_ADMIN. If it fails, we fallback to standard run
+            # but in the hardened Docker image we should ensure it works.
+            command = ["unshare", "-n", "python3", "wrapper.py"]
+            
             process = subprocess.run(
-                ["python3", "wrapper.py"],
+                command,
                 cwd=tmpdir,
                 capture_output=True,
                 text=True,

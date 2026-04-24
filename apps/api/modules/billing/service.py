@@ -15,56 +15,69 @@ SQUADS_PROGRAM_ID = Pubkey.from_string(CONFIG_PROGRAM_ID)
 platform_keypair = Keypair.from_seed(PLATFORM_SECRET_SEED.encode())
 PLATFORM_WALLET = str(platform_keypair.pubkey())
 
-async def verify_solana_payment(task_id: str, expected_amount_sol: float, sender_wallet: str):
+async def verify_solana_payment(tx_signature: str, expected_amount_sol: float, sender_wallet: str, reference: str):
     """
-    Verify payment by checking the transaction history of the PLATFORM_WALLET 
-    for a transfer matching the task_id as a reference.
+    Verify payment strictly by checking the specific transaction signature.
+    Verifies:
+    1. Transaction exists
+    2. Sender matches current_user
+    3. Recipient is PLATFORM_WALLET
+    4. Amount matches agent price
+    5. Reference account is present in the transaction
     """
     async with AsyncClient(SOLANA_RPC_URL) as client:
         try:
-            logger.info(f"Verifying payment for task {task_id}")
+            logger.info(f"Strictly verifying payment signature: {tx_signature}")
             
-            # In a production app, the frontend would pass the transaction signature.
-            # Here we search for transactions involving the platform wallet.
-            resp = await client.get_signatures_for_address(Pubkey.from_string(PLATFORM_WALLET))
-            if not resp.value:
-                return False, "No transactions found for platform wallet"
-
-            # Check the last 10 transactions for a match
-            for sig_info in resp.value[:10]:
-                tx_resp = await client.get_transaction(
-                    sig_info.signature, 
-                    encoding="jsonParsed", 
-                    max_supported_transaction_version=0
-                )
-                if not tx_resp.value:
-                    continue
-                
-                # Verify transaction content
-                tx = tx_resp.value.transaction
-                instructions = tx.transaction.message.instructions
-                
-                for ix in instructions:
-                    if hasattr(ix, 'parsed') and ix.program == "system":
-                        info = ix.parsed.get("info")
-                        # Check if this is a transfer to us
-                        if info and info.get("destination") == PLATFORM_WALLET:
-                            amount = info.get("lamports", 0)
-                            expected_lamports = int(expected_amount_sol * 1e9)
-                            
-                            # Check if task_id matches (passed as a reference account in our frontend logic)
-                            # Or check if any account in the transaction matches our task_id derived public key
-                            accounts = [str(acc.pubkey) for acc in tx.transaction.message.account_keys]
-                            
-                            # This is a simplified but REAL check for the demo
-                            if amount >= expected_lamports * 0.99:
-                                logger.info(f"Real payment verified: {sig_info.signature}")
-                                return True, str(sig_info.signature)
+            # 1. Fetch transaction details
+            tx_resp = await client.get_transaction(
+                tx_signature, 
+                encoding="jsonParsed", 
+                max_supported_transaction_version=0
+            )
+            if not tx_resp.value:
+                return False, "Transaction not found on-chain"
             
-            return False, "Matching transaction not found on-chain"
+            tx = tx_resp.value.transaction
+            # 2. Verify sender (first account is usually fee payer/sender)
+            actual_sender = str(tx.transaction.message.account_keys[0].pubkey)
+            if actual_sender != sender_wallet:
+                return False, f"Sender mismatch. Expected {sender_wallet}, got {actual_sender}"
+            
+            # 3. Check instructions for transfer to platform AND the reference
+            instructions = tx.transaction.message.instructions
+            expected_lamports = int(expected_amount_sol * 1e9)
+            
+            payment_verified = False
+            reference_verified = False
+            
+            for ix in instructions:
+                if hasattr(ix, 'parsed') and ix.program == "system":
+                    info = ix.parsed.get("info")
+                    if info and info.get("destination") == PLATFORM_WALLET:
+                        amount = info.get("lamports", 0)
+                        if amount >= expected_lamports * 0.99:
+                            payment_verified = True
+                    
+                    # Check if reference is in this instruction's keys or the message account keys
+                    # In standard Solana Pay / our escrow logic, reference is an extra account
+            
+            # Check all account keys in the transaction for the reference
+            account_keys = [str(acc.pubkey) for acc in tx.transaction.message.account_keys]
+            if reference in account_keys:
+                reference_verified = True
+            
+            if not payment_verified:
+                return False, f"Transfer to platform wallet {PLATFORM_WALLET} not found or amount incorrect"
+            
+            if not reference_verified:
+                return False, f"Reference {reference} not found in transaction accounts"
+            
+            logger.info(f"Payment verified successfully: {tx_signature}")
+            return True, tx_signature
         except Exception as e:
-            logger.error(f"Payment verification error for task {task_id}: {str(e)}", exc_info=True)
-            return False, f"Verification error (RPC): {str(e)}"
+            logger.error(f"Strict payment verification error: {str(e)}", exc_info=True)
+            return False, f"Verification error: {str(e)}"
 
 async def verify_solana_pay_payment(reference: str, expected_amount_sol: float, recipient_wallet: str):
     """
@@ -161,46 +174,62 @@ async def payout_creator(developer_wallet: str, amount_sol: float):
         logger.error(f"Payout error: {e}")
         return False, str(e)
 
-async def settle_escrow(task_id: str, agent_creator_wallet: str, success: bool, amount_sol: float = 0.01):
+async def transfer_sol(recipient_wallet: str, amount_sol: float):
     """
-    Settle the transaction using a real Squads V4 execution.
+    Native SOL transfer using solders.
+    """
+    from solana.rpc.async_api import AsyncClient
+    from solders.pubkey import Pubkey
+    from solders.system_program import TransferArgs, transfer
+    from solders.transaction import VersionedTransaction
+    from solders.message import MessageV0
+    
+    async with AsyncClient(SOLANA_RPC_URL) as client:
+        try:
+            recipient_pubkey = Pubkey.from_string(recipient_wallet)
+            lamports = int(amount_sol * 1e9)
+            
+            # 1. Get recent blockhash
+            latest_blockhash_resp = await client.get_latest_blockhash()
+            recent_blockhash = latest_blockhash_resp.value.blockhash
+            
+            # 2. Create transfer instruction
+            ix = transfer(TransferArgs(
+                from_pubkey=platform_keypair.pubkey(),
+                to_pubkey=recipient_pubkey,
+                lamports=lamports
+            ))
+            
+            # 3. Create and sign transaction
+            msg = MessageV0.try_compile(
+                payer=platform_keypair.pubkey(),
+                instructions=[ix],
+                address_lookup_table_accounts=[],
+                recent_blockhash=recent_blockhash
+            )
+            tx = VersionedTransaction(msg, [platform_keypair])
+            
+            # 4. Send transaction
+            resp = await client.send_transaction(tx)
+            return True, str(resp.value)
+        except Exception as e:
+            logger.error(f"SOL transfer error: {e}")
+            return False, str(e)
+
+async def settle_task_payment(task_id: str, agent_creator_wallet: str, success: bool, amount_sol: float = 0.01):
+    """
+    Settle the task payment by transferring from platform wallet to creator on success.
     """
     if not success:
         logger.info(f"Task {task_id} failed. No payout triggered.")
         return True, "Task failed, no payout"
 
-    import subprocess
-    import os
-    import base58
-    from backend.core.config import SOLANA_RPC_URL, PLATFORM_SECRET_SEED, SQUADS_PROGRAM_ID
-
-    try:
-        # Derive bs58 secret key
-        kp = Keypair.from_seed(PLATFORM_SECRET_SEED.encode())
-        secret_key_bs58 = base58.b58encode(bytes(kp)).decode('utf-8')
-        
-        # Multsig address for the platform
-        from backend.core.config import SQUADS_MULTISIG_PDA
-        multisig_address = SQUADS_MULTISIG_PDA
-
-        script_path = os.path.join(os.path.dirname(__file__), "squads_action.js")
-        
-        logger.info(f"Squads: Triggering real payout for task {task_id}")
-        
-        result = subprocess.run(
-            ["node", script_path, SOLANA_RPC_URL, secret_key_bs58, multisig_address, agent_creator_wallet, str(amount_sol)],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        if result.returncode == 0:
-            tx_sig = result.stdout.strip()
-            logger.info(f"Squads: Payout successful: {tx_sig}")
-            return True, tx_sig
-        else:
-            logger.error(f"Squads: Payout failed: {result.stderr}")
-            return False, result.stderr
-    except Exception as e:
-        logger.error(f"Squads: Settlement exception: {e}")
-        return False, str(e)
+    logger.info(f"Settling payment for task {task_id}: {amount_sol} SOL to {agent_creator_wallet}")
+    ok, tx_sig = await transfer_sol(agent_creator_wallet, amount_sol)
+    
+    if ok:
+        logger.info(f"Task settlement successful: {tx_sig}")
+        return True, tx_sig
+    else:
+        logger.error(f"Task settlement failed: {tx_sig}")
+        return False, tx_sig

@@ -7,6 +7,7 @@ class RunRequest(BaseModel):
     task_id: str
     input_data: dict
     reference: Optional[str] = None
+    signature: Optional[str] = None
     payment_type: Optional[str] = "escrow" # "escrow" or "solana_pay"
 
 class TaskResponse(BaseModel):
@@ -20,6 +21,7 @@ class TaskHistoryResponse(BaseModel):
     agent_id: str
     status: str
     result: Optional[str] = None
+    execution_receipt: Optional[dict] = None
     created_at: datetime
 
     class Config:

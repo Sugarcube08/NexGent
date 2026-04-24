@@ -14,4 +14,4 @@ target/
 **/dist/
 dist/
 !requirements.txt
-
+*.txt

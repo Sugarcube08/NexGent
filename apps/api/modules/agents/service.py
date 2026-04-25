@@ -43,8 +43,10 @@ async def create_agent(db: AsyncSession, agent_data: AgentCreate, creator_wallet
         from solders.instruction import Instruction, AccountMeta
         from solders.transaction import VersionedTransaction
         from solders.message import MessageV0
+        from solders.pubkey import Pubkey
         from solana.rpc.async_api import AsyncClient
-        from backend.core.config import SOLANA_RPC_URL, PLATFORM_SECRET_SEED
+        from backend.core.config import SOLANA_RPC_URL
+        from backend.modules.billing.service import platform_keypair
         import struct
 
         # Program ID for Metaplex Core
@@ -92,7 +94,7 @@ async def create_agent(db: AsyncSession, agent_data: AgentCreate, creator_wallet
                 logger.info(f"Metaplex: Native mint successful: {resp.value}")
 
         except Exception as e:
-            logger.error(f"Metaplex: Native minting failed (using fallback ID): {e}")
+            logger.error(f"Metaplex: Native minting failed (using fallback ID): {e}", exc_info=True)
             mint_address = f"asset_{hashlib.sha256(agent_data.id.encode()).hexdigest()[:32]}"
 
         db_agent = Agent(

@@ -13,6 +13,7 @@ class Agent(Base):
     price = Column(Float, nullable=False)
     creator_wallet = Column(String, nullable=False, index=True)
     mint_address = Column(String, nullable=True, index=True) # Metaplex Core Asset Address
+    total_runs = Column(Float, nullable=False, default=0)
     successful_runs = Column(Float, nullable=False, default=0)
     
     # Reputation Graph / Trust Fields

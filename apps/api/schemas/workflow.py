@@ -28,3 +28,15 @@ class WorkflowRunResponse(BaseModel):
     run_id: str
     status: str
     current_step_index: int
+
+class WorkflowRunHistoryResponse(BaseModel):
+    id: str
+    workflow_id: str
+    user_wallet: str
+    status: str
+    current_step_index: int
+    results: Optional[Dict] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

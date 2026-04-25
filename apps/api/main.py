@@ -128,6 +128,11 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
 async def health_check():
     return {"status": "healthy"}
 
+@app.get("/config")
+async def get_config():
+    from backend.modules.billing.service import PLATFORM_WALLET
+    return {"platform_wallet": PLATFORM_WALLET}
+
 @app.get("/")
 async def root():
     return {

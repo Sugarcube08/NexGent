@@ -8,27 +8,26 @@ const api = axios.create({
 
 // Add interceptor to include JWT token if available
 api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('shoujiki_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  const token = localStorage.getItem('shoujiki_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+export const loginWallet = async (wallet: string, signature: string, message: string) => {
+  const response = await api.post('/auth/verify', { wallet, signature, message });
+  localStorage.setItem('shoujiki_token', response.data.access_token);
+  return response.data;
+};
 
 export const getAgents = async () => {
   const response = await api.get('/agents');
   return response.data;
 };
 
-export const getMyAgents = async () => {
-  const response = await api.get('/agents/me');
-  return response.data;
-};
-
-export const getMyTasks = async () => {
-  const response = await api.get('/agents/tasks');
+export const getConfig = async () => {
+  const response = await api.get('/config');
   return response.data;
 };
 
@@ -37,31 +36,13 @@ export const getAgent = async (id: string) => {
   return response.data;
 };
 
+export const getMyAgents = async () => {
+  const response = await api.get('/agents/me');
+  return response.data;
+};
+
 export const deployAgent = async (agentData: any) => {
   const response = await api.post('/agents/deploy', agentData);
-  return response.data;
-};
-
-export const testAgent = async (agentData: any) => {
-  const response = await api.post('/agents/test', agentData);
-  return response.data;
-};
-
-export const deleteAgent = async (id: string) => {
-  const response = await api.delete(`/agents/${id}`);
-  return response.data;
-};
-
-export const loginWallet = async (publicKey: string, signature: string, message: string) => {
-  const response = await api.post('/auth/verify', {
-    public_key: publicKey,
-    signature,
-    message,
-  });
-  // Store token in localStorage
-  if (response.data.access_token) {
-    localStorage.setItem('shoujiki_token', response.data.access_token);
-  }
   return response.data;
 };
 
@@ -69,35 +50,24 @@ export const runAgent = async (
   agentId: string, 
   inputData: any, 
   taskId: string, 
-  reference?: string, 
-  paymentType: string = "escrow",
-  signatureBase64?: string,
-  publicKeyBase58?: string,
-  txSignature?: string
+  reference: string, 
+  paymentType: string, 
+  signature: string, 
+  userWallet: string,
+  txSignature: string
 ) => {
-  const payload = {
+  const response = await api.post('/agents/run', {
     agent_id: agentId,
     input_data: inputData,
     task_id: taskId,
     reference,
     payment_type: paymentType,
-    signature: txSignature
-  };
-
-  const headers: any = {
-    'Content-Type': 'application/json'
-  };
-
-  if (signatureBase64 && publicKeyBase58) {
-    headers['X-Payment-Signature'] = signatureBase64;
-    headers['X-Payment-Pubkey'] = publicKeyBase58;
-  }
-
-  const response = await api.post('/agents/run', payload, { headers });
+    signature: txSignature // Send the on-chain tx signature
+  });
   return response.data;
 };
 
-export const getTask = async (taskId: string) => {
+export const getTaskStatus = async (taskId: string) => {
   const response = await api.get(`/agents/tasks`);
   // Find the specific task in the history for now, or add a specific endpoint if needed.
   const tasks = response.data;

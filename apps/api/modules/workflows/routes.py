@@ -7,7 +7,7 @@ import logging
 
 from backend.db.session import get_db
 from backend.db.models.models import Workflow, WorkflowRun
-from backend.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowRunRequest, WorkflowRunResponse
+from backend.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowRunRequest, WorkflowRunResponse, WorkflowRunHistoryResponse
 from backend.core.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -79,4 +79,14 @@ async def list_my_workflows(
     current_user: str = Depends(get_current_user)
 ):
     result = await db.execute(select(Workflow).where(Workflow.creator_wallet == current_user))
+    return result.scalars().all()
+
+@router.get("/runs", response_model=List[WorkflowRunHistoryResponse])
+async def list_my_workflow_runs(
+    db: AsyncSession = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    result = await db.execute(
+        select(WorkflowRun).where(WorkflowRun.user_wallet == current_user).order_by(WorkflowRun.created_at.desc())
+    )
     return result.scalars().all()

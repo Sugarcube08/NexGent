@@ -41,7 +41,7 @@ async def run_agent(
     # 3. Deduct from in-app wallet immediately (Escrowed)
     wallet.balance -= agent.price
     
-    # 4. Create task record
+    # 4. Create task record (using task_id from frontend)
     db_task = Task(
         id=req.task_id,
         agent_id=agent.id,

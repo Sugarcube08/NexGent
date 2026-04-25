@@ -16,6 +16,7 @@ SQUADS_PROGRAM_ID = Pubkey.from_string(CONFIG_PROGRAM_ID)
 seed_bytes = hashlib.sha256(PLATFORM_SECRET_SEED.encode()).digest()
 platform_keypair = Keypair.from_seed(seed_bytes)
 PLATFORM_WALLET = str(platform_keypair.pubkey())
+logger.info(f"SOLANA: Platform Wallet initialized: {PLATFORM_WALLET}")
 
 ESCROW_PROGRAM_ID = Pubkey.from_string("SHoujikiEscrow11111111111111111111111111111")
 

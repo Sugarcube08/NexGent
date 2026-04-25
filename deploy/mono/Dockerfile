@@ -42,18 +42,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY apps/sandbox/ .
 
 # Setup Web (Standalone)
-WORKDIR /app
-COPY --from=frontend-builder /app/.next/standalone ./web/
-COPY --from=frontend-builder /app/.next/static ./web/.next/static
-COPY --from=frontend-builder /app/public ./web/public
+WORKDIR /app/web
+# Next.js standalone needs specific folder structure to serve static files
+COPY --from=frontend-builder /app/.next/standalone ./
+COPY --from=frontend-builder /app/.next/static ./.next/static
+COPY --from=frontend-builder /app/public ./public
 
 # Supervisor configuration
+WORKDIR /app
 RUN mkdir -p /var/log/supervisor
-# Force same configuration across all entrypoints
 COPY deploy/mono/supervisord.conf /etc/supervisor/supervisord.conf
 
-# Expose Web (3000) and API (8000)
-EXPOSE 3000 8000
+# Expose ONLY the UI port to Render (Force routing to Next.js)
+# Next.js will proxy /api to the FastAPI app on 8000 internally
+EXPOSE 3000
 
 # Force supervisor to use the explicit config and stay in foreground
 CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

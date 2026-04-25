@@ -1,5 +1,4 @@
 /** @type {import('next').NextConfig} */
-// Force reload: 1776720037837
 const nextConfig = {
     reactStrictMode: true,
     output: 'standalone',
@@ -7,6 +6,15 @@ const nextConfig = {
     webpack: (config) => {
         config.resolve.fallback = { fs: false, os: false, path: false };
         return config;
+    },
+    // Proxy /api requests to the FastAPI backend in the mono-container
+    async rewrites() {
+        return [
+            {
+                source: '/api/:path*',
+                destination: 'http://127.0.0.1:8000/:path*',
+            },
+        ];
     },
 };
 

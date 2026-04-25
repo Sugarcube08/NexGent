@@ -12,7 +12,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 SQUADS_PROGRAM_ID = Pubkey.from_string(CONFIG_PROGRAM_ID)
-platform_keypair = Keypair.from_seed(PLATFORM_SECRET_SEED.encode())
+# Hash the seed to ensure it is exactly 32 bytes for solders.keypair.Keypair.from_seed
+seed_bytes = hashlib.sha256(PLATFORM_SECRET_SEED.encode()).digest()
+platform_keypair = Keypair.from_seed(seed_bytes)
 PLATFORM_WALLET = str(platform_keypair.pubkey())
 
 ESCROW_PROGRAM_ID = Pubkey.from_string("SHoujikiEscrow11111111111111111111111111111")

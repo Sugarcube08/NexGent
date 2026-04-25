@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.db.session import engine, Base, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from backend.modules.auth.routes import router as auth_router
 from backend.modules.agents.routes import router as agents_router
 from backend.modules.billing.routes import router as billing_router
@@ -41,9 +42,22 @@ async def lifespan(app: FastAPI):
     for i in range(max_retries):
         try:
             async with engine.begin() as conn:
-                # Import models here to ensure they are registered
+                # 1. Ensure tables exist
                 from backend.db.models.models import Agent, Task, Payment
                 await conn.run_sync(Base.metadata.create_all)
+                
+                # 2. Manual Migration: Add missing columns if they don't exist
+                # This handles cases where Render DB already exists but code has new fields
+                try:
+                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_runs FLOAT DEFAULT 0"))
+                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS reputation_score FLOAT DEFAULT 100"))
+                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS reliability_score FLOAT DEFAULT 1"))
+                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS contribution_score FLOAT DEFAULT 0"))
+                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS trust_level VARCHAR DEFAULT 'verified'"))
+                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS mint_address VARCHAR"))
+                except Exception as migrate_err:
+                    logger.warning(f"Manual migration notice (likely already applied): {migrate_err}")
+
             logger.info("Database connection established and tables verified.")
             break
         except Exception as e:

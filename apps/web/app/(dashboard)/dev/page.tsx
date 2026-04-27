@@ -19,7 +19,9 @@ import {
   ChevronRight,
   MonitorPlay,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
 import Editor from "@monaco-editor/react";
@@ -63,6 +65,13 @@ agent = Agent()`,
   const [testResult, setTestResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleAddFile = () => {
     const filename = prompt('Enter filename:');
@@ -240,9 +249,22 @@ agent = Agent()`,
                       <Terminal size={14} className="text-zinc-500" />
                       <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Simulator_Output</span>
                    </div>
-                   {testResult?.success && <span className="text-[9px] font-black text-green-500 uppercase tracking-widest flex items-center gap-1.5">
-                      <CheckCircle2 size={12} /> Integrity Pass
-                   </span>}
+                   <div className="flex items-center gap-4">
+                      <button 
+                         onClick={() => copyToClipboard(error || JSON.stringify(testResult, null, 2))}
+                         className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors"
+                      >
+                         {copied ? (
+                            <><Check size={12} className="text-green-500" /> Copied</>
+                         ) : (
+                            <><Copy size={12} /> Copy_Output</>
+                         )}
+                      </button>
+                      {testResult?.success && <span className="text-[9px] font-black text-green-500 uppercase tracking-widest flex items-center gap-1.5">
+                         <CheckCircle2 size={12} /> Integrity Pass
+                      </span>}
+                   </div>
+
                 </CardHeader>
                 <div className="flex-1 p-6 overflow-y-auto custom-scrollbar font-mono text-[11px] leading-relaxed">
                    {error ? (

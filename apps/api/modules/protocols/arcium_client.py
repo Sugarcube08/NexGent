@@ -12,7 +12,7 @@ class ArciumClient:
     """
     VACN Verifiable Compute Engine (Arcium/WASM).
     Executes agent logic in a strictly deterministic WebAssembly runtime.
-    Generates a cryptographic Proof of Autonomous Execution (PoAE) based on the state transition.
+    Generates a Deterministic Execution Receipt based on the state transition.
     """
 
     def __init__(self):
@@ -36,7 +36,7 @@ class ArciumClient:
             wasm_file = next((v for k, v in files.items() if k.endswith('.wasm')), None)
             
             output_data = {}
-            execution_trace = "simulated_wasm"
+            execution_trace = "python_deterministic_fallback"
 
             if wasm_file:
                 # REAL WASM EXECUTION (Phase 2 Alpha)
@@ -104,14 +104,14 @@ class ArciumClient:
             output_bytes = json.dumps(output_data, sort_keys=True).encode()
             output_hash = hashlib.sha256(output_bytes).hexdigest()
             
-            # 4. Generate PoAE
+            # 4. Generate Execution Receipt
             code_hash = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
-            poae_payload = f"{code_hash}:{input_hash}:{output_hash}:{execution_trace}"
-            poae_sig = hashlib.sha256(poae_payload.encode()).hexdigest()
+            receipt_payload = f"{code_hash}:{input_hash}:{output_hash}:{execution_trace}"
+            receipt_sig = hashlib.sha256(receipt_payload.encode()).hexdigest()
             
             return {
                 "result": output_data,
-                "proof_of_autonomous_execution": poae_sig
+                "execution_receipt": receipt_sig
             }
             
         except Exception as e:

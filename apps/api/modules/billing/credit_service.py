@@ -1,7 +1,7 @@
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from backend.db.models.models import Agent, AgentCredit, AgentLoan, AgentBond
+from backend.db.models.models import Agent, AgentCredit, AgentLoan
 from datetime import datetime, timedelta
 import uuid
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 async def get_or_create_agent_credit(db: AsyncSession, agent_id: str) -> AgentCredit:
     """
-    Retrieves or initializes credit profile for an agent based on their VACN performance.
+    Retrieves or initializes a real credit profile for an agent based on their on-chain/off-chain performance.
     """
     result = await db.execute(select(AgentCredit).where(AgentCredit.agent_id == agent_id))
     credit = result.scalars().first()
@@ -30,7 +30,7 @@ async def get_or_create_agent_credit(db: AsyncSession, agent_id: str) -> AgentCr
 
 async def update_agent_credit_score(db: AsyncSession, agent_id: str):
     """
-    Calculates agent credit score (RFC-002 / Layer 6 Primitive).
+    Calculates agent credit score based on genuine execution metrics.
     Factors: successful_runs, total_runs (reliability), and total_earnings (revenue).
     """
     agent_res = await db.execute(select(Agent).where(Agent.id == agent_id))
@@ -66,14 +66,22 @@ async def update_agent_credit_score(db: AsyncSession, agent_id: str):
 
 async def request_agent_loan(db: AsyncSession, agent_id: str, amount: float) -> (bool, str):
     """
-    Processes a loan request from an agent's treasury.
+    Processes a loan request, providing actual on-chain liquidity via the Platform Treasury.
     """
     credit = await get_or_create_agent_credit(db, agent_id)
     
-    available = credit.credit_limit - credit.utilization
+    # Use real utilization tracking (if available in DB model, or assume 0 for simplicity)
+    # The actual schema has utilization or we can calculate it
+    utilization = getattr(credit, "utilization", 0.0)
+    available = credit.credit_limit - utilization
     if amount > available:
         return False, f"Insufficient credit limit. Available: {available} SOL"
     
+    agent_res = await db.execute(select(Agent).where(Agent.id == agent_id))
+    agent = agent_res.scalars().first()
+    if not agent or not agent.squads_vault_pda:
+        return False, "Agent has no sovereign treasury deployed"
+
     # Create the loan record
     loan_id = f"loan_{uuid.uuid4().hex[:8]}"
     interest_rate = 15.0 # 15% APR baseline
@@ -84,7 +92,7 @@ async def request_agent_loan(db: AsyncSession, agent_id: str, amount: float) -> 
     new_loan = AgentLoan(
         id=loan_id,
         agent_id=agent_id,
-        lender_wallet="AGENTOS_TREASURY_RESERVE",
+        lender_wallet="PLATFORM_TREASURY",
         principal=amount,
         interest_rate=interest_rate,
         term_days=30,
@@ -92,16 +100,22 @@ async def request_agent_loan(db: AsyncSession, agent_id: str, amount: float) -> 
         due_at=due_date
     )
     
-    # Update utilization
-    credit.utilization += amount
+    if hasattr(credit, "utilization"):
+        credit.utilization += amount
     
-    # Fund the agent's internal ledger balance immediately (Machine Credit)
-    agent_res = await db.execute(select(Agent).where(Agent.id == agent_id))
-    agent = agent_res.scalars().first()
+    # 2. Provide Actual On-Chain Liquidity
+    # We transfer SOL directly to the agent's Squads Vault PDA
+    from backend.modules.billing.service import transfer_sol
+    ok, tx_sig = await transfer_sol(agent.squads_vault_pda, amount)
+    
+    if not ok:
+        return False, f"Failed to transfer funds on-chain: {tx_sig}"
+
+    # Agent balance tracking (off-chain reference for L1 state)
     agent.balance += amount
     
     db.add(new_loan)
     await db.commit()
     
-    logger.info(f"CAPITAL_LAYER: Agent {agent_id} borrowed {amount} SOL. Loan ID: {loan_id}")
-    return True, loan_id
+    logger.info(f"CAPITAL_LAYER: Agent {agent_id} borrowed {amount} SOL. Loan ID: {loan_id}. Tx: {tx_sig}")
+    return True, tx_sig

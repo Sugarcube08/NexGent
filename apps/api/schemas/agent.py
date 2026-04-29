@@ -19,6 +19,7 @@ class AgentCreate(AgentBase):
     requirements: List[str]
     entrypoint: str
     version: str = "v1"
+    world_id_proof: Optional[dict] = None
 
 class AgentTestRequest(BaseModel):
     files: Dict[str, str]

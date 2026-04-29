@@ -116,6 +116,11 @@ export const requestAgentLoan = async (agentId: string, amount: number) => {
   return response.data;
 };
 
+export const getAgentLoans = async (agentId: string) => {
+  const response = await api.get(`/billing/agent/${agentId}/loans`);
+  return response.data;
+};
+
 export const depositToAppWallet = async (amount: number) => {
   const response = await api.post('/billing/wallet/deposit', { amount });
   return response.data;

@@ -46,8 +46,9 @@ async def create_agent(db: AsyncSession, agent_data: AgentCreate, creator_wallet
         # VACN Protocol: Identity & Treasury Provisioning
         
         # 1. World ID: Verify creator provenance (Proof of Human)
-        # In a real flow, the ZKP would be passed from the frontend
-        world_id_hash = await world_id_client.verify_human_creator(creator_wallet, {"mock": "proof"})
+        # We pass the real ZKP from the frontend to the verification API
+        verification_data = agent_data.world_id_proof or {}
+        world_id_hash = await world_id_client.verify_human_creator(creator_wallet, verification_data)
         
         # 2. Squads V4: Deploy Sovereign Agent Treasury
         squads_pda = await squads_client.deploy_agent_treasury(agent_data.id, creator_wallet)
@@ -106,8 +107,8 @@ async def create_agent(db: AsyncSession, agent_data: AgentCreate, creator_wallet
                 logger.info(f"Metaplex: Passport mint successful: {resp.value}")
 
         except Exception as e:
-            logger.error(f"Metaplex: Passport minting failed (using fallback): {e}")
-            mint_address = f"passport_{hashlib.sha256(agent_data.id.encode()).hexdigest()[:32]}"
+            logger.error(f"Metaplex: Passport minting failed: {e}")
+            raise Exception(f"Protocol Auth Error: Failed to mint Metaplex Passport for {agent_data.name}. {str(e)}")
 
         db_agent = Agent(
             id=agent_data.id,

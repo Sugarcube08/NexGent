@@ -3,30 +3,32 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getAgent, runAgent, getConfig } from '@/lib/api';
-import { setPlatformWallet } from '@/lib/solana';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { setPlatformWallet, createEscrowTransaction, confirmTx } from '@/lib/solana';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { 
   Loader2, ArrowLeft, Play, Terminal, 
   AlertCircle, BadgeCheck, Cpu, Activity, Lock, 
-  CheckCircle2, Fingerprint
+  CheckCircle2, Fingerprint, Coins
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { cn, truncateWallet } from '@/lib/utils';
+import { PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
 
 export default function AgentRunPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { signMessage } = useWallet();
+  const { connection } = useConnection();
+  const { signMessage, sendTransaction } = useWallet();
   const { isAuthenticated, login, connected, publicKey } = useWalletAuth();
 
   const [agent, setAgent] = useState<any>(null);
   const [inputData, setInputData] = useState('{"prompt": "Hello"}');
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<'idle' | 'signing' | 'executing' | 'done'>('idle');
+  const [status, setStatus] = useState<'idle' | 'signing' | 'funding' | 'executing' | 'done'>('idle');
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
@@ -57,7 +59,7 @@ export default function AgentRunPage() {
   };
 
   const handleRun = async () => {
-    if (!publicKey || !isAuthenticated || !signMessage || !agent) return;
+    if (!publicKey || !isAuthenticated || !signMessage || !agent || !sendTransaction) return;
 
     setError('');
     setResult(null);
@@ -65,6 +67,7 @@ export default function AgentRunPage() {
     try {
       const taskId = crypto.randomUUID();
 
+      // 1. Authorization Signature (X402 Pattern)
       setStatus('signing');
       addLog("Preparing protocol payload...");
       
@@ -74,14 +77,41 @@ export default function AgentRunPage() {
       addLog("Waiting for SVM authorization signature...");
       const sigBytes = await signMessage(payloadBytes);
       const sigBase64 = Buffer.from(sigBytes).toString('base64');
-      addLog("Signature verified.");
+      addLog("Identity verified.");
 
+      // 2. On-chain Escrow Funding
+      setStatus('funding');
+      addLog(`Initializing on-chain escrow for ${agent.price} SOL...`);
+      
+      const { tx, reference } = await createEscrowTransaction(
+        publicKey,
+        new PublicKey(agent.creator_wallet),
+        taskId,
+        agent.price
+      );
+
+      const txSig = await sendTransaction(tx, connection);
+      addLog(`Transaction sent: ${txSig.slice(0, 8)}...`);
+      addLog("Waiting for network confirmation...");
+      
+      await confirmTx(connection, txSig);
+      addLog("Escrow funded and verified on Solana.");
+
+      // 3. Trigger API Execution
       setStatus('executing');
-      addLog("Initiating neural execution cycles...");
+      addLog("Relaying proof of funding to VACN nodes...");
 
       await runAgent(
-        agent.id, runBody.input_data, taskId, "", "internal", "", 
-        publicKey.toBase58(), "", sigBase64, publicKey.toBase58()
+        agent.id, 
+        runBody.input_data, 
+        taskId, 
+        reference.toBase58(), 
+        "escrow", 
+        txSig, 
+        publicKey.toBase58(), 
+        txSig, 
+        sigBase64, 
+        publicKey.toBase58()
       );
 
       const wsUrl = `${process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws')}/ws/tasks/${taskId}`;
@@ -90,7 +120,7 @@ export default function AgentRunPage() {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.status === 'running') {
-          addLog("Agent active in Arcium Confidential VM.");
+          addLog("Agent active in Deterministic WASM Sandbox.");
         } else if (data.status === 'completed' || data.status === 'failed') {
           setResult(data.result || data.error);
           setStatus('done');
@@ -100,15 +130,16 @@ export default function AgentRunPage() {
             addLog("Execution aborted.");
           } else {
             addLog("Result finalized.");
-            if (data.poae_hash) {
-              addLog(`Proof of Autonomous Execution (PoAE): ${data.poae_hash.slice(0, 16)}...`);
-              addLog("Status: Cryptographically Anchored on Solana.");
+            if (data.receipt_hash) {
+              addLog(`Deterministic Execution Receipt: ${data.receipt_hash.slice(0, 16)}...`);
+              addLog("Status: Settling on-chain via Escrow.");
             }
           }
           ws.close();
         }
       };
     } catch (err: any) {
+      console.error(err);
       setError(err.message || 'Execution failed');
       setStatus('idle');
     }
@@ -169,15 +200,6 @@ export default function AgentRunPage() {
                     <span className="text-[11px] font-mono text-zinc-500 truncate">{agent.mint_address || "Awaiting Registry..."}</span>
                   </div>
                </div>
-               {agent.squads_vault_pda && (
-                 <div className="p-4 rounded-xl bg-zinc-900/20 border border-zinc-800 flex flex-col gap-1">
-                    <span className="text-[9px] font-bold text-zinc-700 uppercase">Sovereign_Vault (Squads)</span>
-                    <div className="flex items-center gap-3">
-                      <Lock size={16} className="text-zinc-600" />
-                      <span className="text-[11px] font-mono text-zinc-500 truncate">{agent.squads_vault_pda}</span>
-                    </div>
-                 </div>
-               )}
              </div>
           </div>
         </div>
@@ -192,7 +214,7 @@ export default function AgentRunPage() {
                  </div>
                  <div className="flex items-center gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
-                    <span className="text-[9px] font-medium text-zinc-600 uppercase">Arcium_Confidential_Compute</span>
+                    <span className="text-[9px] font-medium text-zinc-600 uppercase">Deterministic_WASM_Sandbox</span>
                  </div>
               </div>
               <div className="flex-1 p-0 flex flex-col">

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getAgent, getAgentCredit, refreshCreditScore, requestAgentLoan } from '@/lib/api';
+import { getAgent, getAgentCredit, refreshCreditScore, requestAgentLoan, getAgentLoans } from '@/lib/api';
 import { 
   Loader2, ArrowLeft, BarChart3, TrendingUp, 
   Wallet, Landmark, Receipt, AlertCircle, 
@@ -23,6 +23,7 @@ export default function AgentFinancePage() {
   
   const [agent, setAgent] = useState<any>(null);
   const [credit, setCredit] = useState<any>(null);
+  const [loans, setLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loanAmount, setLoanAmount] = useState('0.1');
   const [actionLoading, setActionLoading] = useState(false);
@@ -31,12 +32,14 @@ export default function AgentFinancePage() {
 
   const fetchData = async () => {
     try {
-      const [agentData, creditData] = await Promise.all([
+      const [agentData, creditData, loansData] = await Promise.all([
         getAgent(agentId),
-        getAgentCredit(agentId)
+        getAgentCredit(agentId),
+        getAgentLoans(agentId)
       ]);
       setAgent(agentData);
       setCredit(creditData);
+      setLoans(loansData);
     } catch (err) {
       console.error(err);
       setError("Failed to access Capital Layer data.");
@@ -216,13 +219,49 @@ export default function AgentFinancePage() {
               </div>
            </Card>
 
-           {/* Repayment Tracker (Stub) */}
+           {/* Active Loans */}
            <div className="space-y-4">
               <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-2">Active Capital Contracts</h3>
-              <div className="bg-[#0c0c0e] border border-zinc-800/60 rounded-2xl p-10 text-center space-y-3">
-                 <Receipt size={32} className="text-zinc-800 mx-auto" />
-                 <p className="text-[10px] font-bold text-zinc-700 uppercase tracking-widest">No active loan contracts found in registry</p>
-              </div>
+              {loans.length === 0 ? (
+                 <div className="bg-[#0c0c0e] border border-zinc-800/60 rounded-2xl p-10 text-center space-y-3">
+                    <Receipt size={32} className="text-zinc-800 mx-auto" />
+                    <p className="text-[10px] font-bold text-zinc-700 uppercase tracking-widest">No active loan contracts found in registry</p>
+                 </div>
+              ) : (
+                 <div className="bg-[#0c0c0e] border border-zinc-800/60 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                       <thead>
+                          <tr className="bg-zinc-900/40 border-b border-zinc-800/60">
+                             <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">ID</th>
+                             <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Principal (SOL)</th>
+                             <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Rate</th>
+                             <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Remaining</th>
+                             <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Status</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-zinc-800/40">
+                          {loans.map(loan => (
+                             <tr key={loan.id} className="hover:bg-zinc-900/20 transition-colors">
+                                <td className="px-6 py-4 text-xs font-mono text-zinc-400">{loan.id.slice(0, 8)}...</td>
+                                <td className="px-6 py-4 text-xs font-semibold text-zinc-200">{loan.principal.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-xs text-zinc-400">{loan.interest_rate.toFixed(1)}% APR</td>
+                                <td className="px-6 py-4 text-xs font-semibold text-zinc-200">{loan.balance_remaining.toFixed(4)}</td>
+                                <td className="px-6 py-4">
+                                   <span className={cn(
+                                      "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded",
+                                      loan.status === 'active' ? "bg-blue-500/10 text-blue-400" :
+                                      loan.status === 'defaulted' ? "bg-red-500/10 text-red-400" :
+                                      "bg-zinc-800/50 text-zinc-400"
+                                   )}>
+                                      {loan.status}
+                                   </span>
+                                </td>
+                             </tr>
+                          ))}
+                       </tbody>
+                    </table>
+                 </div>
+              )}
            </div>
         </div>
       </div>

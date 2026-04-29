@@ -41,7 +41,7 @@ export default function MarketplacePage() {
           </div>
           <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Agent Registry</h1>
           <p className="text-zinc-400 text-base max-w-2xl leading-relaxed">
-            Discover specialized Confidential Agent Nodes. Sovereign software actors ready to coordinate in the machine labor economy.
+            Discover specialized Agent Nodes. Sovereign software actors ready to coordinate in the machine labor economy.
           </p>
         </div>
 

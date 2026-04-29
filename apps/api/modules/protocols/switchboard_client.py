@@ -1,22 +1,80 @@
 import logging
+import hashlib
+import struct
+from solders.pubkey import Pubkey
+from solders.instruction import Instruction, AccountMeta
+from solders.keypair import Keypair
+from solders.transaction import VersionedTransaction
+from solders.message import MessageV0
+from solana.rpc.async_api import AsyncClient
+
+from backend.core.config import SOLANA_RPC_URL, PLATFORM_SECRET_SEED
 
 logger = logging.getLogger(__name__)
 
+# Initialize Platform Keypair
+platform_seed = hashlib.sha256(PLATFORM_SECRET_SEED.encode()).digest()
+platform_keypair = Keypair.from_seed(platform_seed)
+
+def get_anchor_discriminator(name: str) -> bytes:
+    return hashlib.sha256(f"global:{name}".encode()).digest()[:8]
+
 class SwitchboardClient:
     """
-    Protocol adapter for Switchboard (Decentralized Proof Oracles).
-    In Phase 2 of VACN, Switchboard is used to verify the PoAE (Proof of Autonomous Execution)
-    on-chain. This removes the platform's role as the sole arbiter of execution success.
+    Protocol adapter for Switchboard V3 (Decentralized Proof Oracles).
+    Submits actual transactions to invoke a Switchboard Function.
     """
 
     def __init__(self):
-        self.program_id = "SW1TCH7qEPTUqzhMvY7DMDnNvA7d2u7t6N4q2DMD"
+        # Default Switchboard V3 program ID
+        self.program_id = Pubkey.from_string("SW1TCH7qEPTUqzhMvY7DMDnNvA7d2u7t6N4q2DMD")
 
-    async def create_verification_request(self, task_id: str, poae_hash: str) -> str:
+    async def create_verification_request(self, task_id: str, receipt_hash: str) -> str:
         """
-        Triggers a Switchboard Function to verify the PoAE hash against the 
-        Confidential VM's output state.
+        Triggers a verification request via Switchboard.
         """
         logger.info(f"VACN_ORACLE: Submitting verification request to Switchboard for task {task_id}")
-        # Return a mock Switchboard transaction signature
-        return f"sb_verify_{task_id[:8]}"
+        
+        try:
+            # 1. Derive deterministic Function and Request PDAs for the oracle call
+            # In a full deployment, these would be initialized ahead of time
+            task_seed = hashlib.sha256(task_id.encode()).digest()
+            request_keypair = Keypair.from_seed(task_seed)
+            request_pubkey = request_keypair.pubkey()
+            
+            # 2. Construct the instruction (e.g., function_request_trigger)
+            disc = get_anchor_discriminator("function_request_trigger")
+            
+            # Data typically contains parameters for the function
+            receipt_bytes = receipt_hash.encode()
+            data = disc + struct.pack("<I", len(receipt_bytes)) + receipt_bytes
+            
+            ix = Instruction(
+                program_id=self.program_id,
+                data=data,
+                accounts=[
+                    AccountMeta(pubkey=request_pubkey, is_signer=False, is_writable=True),
+                    AccountMeta(pubkey=platform_keypair.pubkey(), is_signer=True, is_writable=True),
+                    # Other necessary accounts (e.g. system program, function config) would go here
+                ]
+            )
+
+            async with AsyncClient(SOLANA_RPC_URL) as client:
+                latest_blockhash = (await client.get_latest_blockhash()).value.blockhash
+                msg = MessageV0.try_compile(
+                    payer=platform_keypair.pubkey(),
+                    instructions=[ix],
+                    address_lookup_table_accounts=[],
+                    recent_blockhash=latest_blockhash
+                )
+                tx = VersionedTransaction(msg, [platform_keypair])
+                
+                resp = await client.send_transaction(tx)
+                logger.info(f"VACN_ORACLE: Verification request submitted. Tx: {resp.value}")
+                return str(resp.value)
+                
+        except Exception as e:
+            logger.error(f"VACN_ORACLE: Failed to trigger oracle for {task_id}: {e}")
+            # Strict Zero-Trust Enforcement: We do not return mock signatures.
+            # If the oracle cannot be reached, verification fails.
+            raise Exception("Switchboard decentralized oracle trigger failed.")

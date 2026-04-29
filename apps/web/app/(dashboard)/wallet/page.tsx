@@ -1,22 +1,20 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { getMyAppWallet, depositToAppWallet, withdrawFromAppWallet, getMyAgents } from '@/lib/api';
-import { Loader2, Wallet, ArrowUpCircle, ArrowDownCircle, Shield, CreditCard, Activity, Cpu } from 'lucide-react';
+import { getMyAppWallet, getMyAgents, withdrawAgentBalance } from '@/lib/api';
+import { Loader2, Wallet, ArrowUpCircle, ArrowDownCircle, Shield, CreditCard, Activity, Cpu, ExternalLink, Landmark } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
 import { Alert } from '@/components/ui/Alert';
-import { Input } from '@/components/ui/Input';
 import { truncateWallet } from '@/lib/utils';
 
 export default function WalletPage() {
-  const { isAuthenticated, connected, login } = useWalletAuth();
+  const { isAuthenticated, connected, login, balance } = useWalletAuth();
   
   const [wallet, setWallet] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [amount, setAmount] = useState('0.1');
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -44,29 +42,15 @@ export default function WalletPage() {
     }
   }, [isAuthenticated]);
 
-  const handleDeposit = async () => {
+  const handleWithdrawAgent = async (agentId: string) => {
     setActionLoading(true);
     setError('');
     try {
-      await depositToAppWallet(parseFloat(amount));
-      setSuccess(`Successfully deposited ${amount} SOL to App Wallet.`);
+      const res = await withdrawAgentBalance(agentId);
+      setSuccess(`Withdrawal proposal ${res.tx_signature} created on-chain via Squads V4.`);
       fetchData();
     } catch (err: any) {
-      setError('Deposit failed. Please try again.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleWithdraw = async () => {
-    setActionLoading(true);
-    setError('');
-    try {
-      await withdrawFromAppWallet(parseFloat(amount));
-      setSuccess(`Withdrawal of ${amount} SOL initiated.`);
-      fetchData();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Withdrawal failed.');
+      setError(err.response?.data?.detail || 'Withdrawal proposal failed.');
     } finally {
       setActionLoading(false);
     }
@@ -91,7 +75,7 @@ export default function WalletPage() {
     return (
       <div className="flex flex-col items-center justify-center py-40 gap-4">
         <Loader2 className="animate-spin text-zinc-700" size={24} />
-        <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest">Accessing Secure Ledger...</p>
+        <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest">Accessing Protocol Index...</p>
       </div>
     );
   }
@@ -99,9 +83,9 @@ export default function WalletPage() {
   return (
     <div className="space-y-10 animate-in fade-in duration-700 pb-24 text-left">
       <div className="space-y-1.5 pb-8 border-b border-zinc-900">
-        <h1 className="text-3xl font-semibold text-zinc-100 tracking-tight">App Wallet</h1>
+        <h1 className="text-3xl font-semibold text-zinc-100 tracking-tight">Protocol Treasury</h1>
         <p className="text-zinc-400 text-sm font-medium leading-relaxed">
-          Manage your Layer 2 balances and agent treasury allowances.
+          Monitor on-chain balances and manage sovereign agent vaults.
         </p>
       </div>
 
@@ -112,47 +96,36 @@ export default function WalletPage() {
              <Wallet size={120} />
           </div>
           <CardHeader className="pb-2">
-            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Available Balance</span>
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Authorized Identity</span>
           </CardHeader>
           <CardContent className="space-y-6 relative z-10">
             <div>
               <h2 className="text-4xl font-bold text-white tracking-tighter">
-                {wallet?.balance?.toFixed(4)} <span className="text-lg text-zinc-500 font-medium">SOL</span>
+                {balance?.toFixed(4)} <span className="text-lg text-zinc-500 font-medium">SOL</span>
               </h2>
               <p className="text-[10px] text-zinc-600 font-mono mt-1 uppercase tracking-tighter">
-                Vault: {truncateWallet(wallet?.wallet_address)}
+                Account: {truncateWallet(wallet?.wallet_address)}
               </p>
             </div>
 
-            <div className="space-y-3 pt-4">
-               <div className="flex flex-col gap-1.5">
-                  <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest px-1">Amount</span>
-                  <Input 
-                    type="number" 
-                    value={amount} 
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="bg-zinc-900/50 border-zinc-800 text-white font-mono h-11"
-                    placeholder="0.1"
-                  />
+            <div className="space-y-3 pt-4 border-t border-zinc-900">
+               <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Status</span>
+                  <span className="text-[10px] font-bold text-green-500 uppercase">Active_on_Mainnet</span>
                </div>
-               <div className="flex gap-2">
-                  <Button 
-                    onClick={handleDeposit} 
-                    disabled={actionLoading}
-                    className="flex-1 h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-xl gap-2 font-bold text-[11px] uppercase tracking-widest"
-                  >
-                    <ArrowDownCircle size={16} /> Deposit
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={handleWithdraw} 
-                    disabled={actionLoading}
-                    className="flex-1 h-11 border-zinc-800 bg-transparent hover:bg-zinc-900 text-zinc-300 rounded-xl gap-2 font-bold text-[11px] uppercase tracking-widest"
-                  >
-                    <ArrowUpCircle size={16} /> Withdraw
-                  </Button>
+               <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Network</span>
+                  <span className="text-[10px] font-bold text-blue-400 uppercase font-mono tracking-tight">Solana_Devnet</span>
                </div>
             </div>
+            
+            <Button 
+               variant="outline"
+               onClick={() => window.open(`https://explorer.solana.com/address/${wallet?.wallet_address}?cluster=devnet`, '_blank')}
+               className="w-full h-11 border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 text-zinc-400 rounded-xl gap-2 font-bold text-[10px] uppercase tracking-widest"
+            >
+               <ExternalLink size={14} /> Explorer View
+            </Button>
           </CardContent>
         </Card>
 
@@ -184,12 +157,12 @@ export default function WalletPage() {
               </Card>
            </div>
 
-           {/* Agent Allowances Table */}
+           {/* Agent Sovereign Vaults Table */}
            <div className="space-y-4">
               <div className="flex items-center justify-between px-2">
                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                    <Shield size={14} className="text-zinc-600" />
-                    Agent Allowances (L2)
+                    <Landmark size={14} className="text-zinc-600" />
+                    Sovereign Vaults (Squads V4)
                  </h3>
                  <span className="text-[9px] text-zinc-600 uppercase font-bold tracking-tighter">Verified State</span>
               </div>
@@ -199,8 +172,8 @@ export default function WalletPage() {
                     <thead>
                        <tr className="bg-zinc-900/40 border-b border-zinc-800/60">
                           <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Agent</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Vault PDA</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-right">Allowance</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest">Earnings</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest text-right">Action</th>
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/40">
@@ -210,21 +183,27 @@ export default function WalletPage() {
                                 {agent.name}
                                 <span className="block text-[10px] text-zinc-600 font-mono mt-0.5">{agent.id.slice(0, 8)}...</span>
                              </td>
-                             <td className="px-6 py-4 text-[10px] font-mono text-zinc-500">
-                                {truncateWallet(agent.squads_vault_pda)}
+                             <td className="px-6 py-4">
+                                <span className="text-xs font-mono text-zinc-400">
+                                   {agent.balance.toFixed(4)} SOL
+                                </span>
                              </td>
                              <td className="px-6 py-4 text-right">
-                                <span className="text-xs font-mono text-zinc-400">
-                                   {wallet?.allowances?.[agent.id] !== undefined 
-                                      ? `${wallet.allowances[agent.id].toFixed(2)} SOL` 
-                                      : "Unlimited"}
-                                </span>
+                                <Button 
+                                   variant="outline" 
+                                   size="sm"
+                                   disabled={actionLoading || agent.balance <= 0}
+                                   onClick={() => handleWithdrawAgent(agent.id)}
+                                   className="h-8 px-3 border-zinc-800 text-[9px] font-black uppercase tracking-widest hover:bg-zinc-900 hover:text-white"
+                                >
+                                   Withdraw
+                                </Button>
                              </td>
                           </tr>
                        )) : (
                           <tr>
                              <td colSpan={3} className="px-6 py-12 text-center text-[10px] font-bold text-zinc-700 uppercase tracking-widest">
-                                No active treasuries found in network index
+                                No active sovereign vaults found
                              </td>
                           </tr>
                        )}

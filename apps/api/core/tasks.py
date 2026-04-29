@@ -55,19 +55,19 @@ async def run_agent_task(ctx, task_id: str, agent_id: str, input_data: dict, cre
             logger.error(f"Worker: Agent {agent_id} not found")
             return
 
-        # 2. Wallet OS Layer 2: Auto Fee Deduction (RFC-002)
-        # Attempt to deduct fee from user's app-level wallet
-        fee_deducted = await treasury_service.check_and_deduct_fee(
-            db, db_task.user_wallet, agent.id, agent.price
+        # 2. Protocol Security: Verify On-chain Escrow
+        # Ensure the task has been funded on-chain before executing.
+        escrow_ok, detail = await billing_service.verify_escrow_funded(
+            task_id, agent.price
         )
-        if not fee_deducted:
-            logger.warning(f"Worker: Task {task_id} aborted - Insufficient App Wallet balance for user {db_task.user_wallet}")
+        if not escrow_ok:
+            logger.warning(f"Worker: Task {task_id} aborted - {detail}")
             db_task.status = "failed"
-            db_task.result = "Insufficient App Wallet balance (Wallet OS L2)"
+            db_task.result = f"On-chain Escrow Error: {detail}"
             await db.commit()
             await redis_pubsub.publish(f"task:{task_id}", json.dumps({
                 "status": "failed", 
-                "error": "Insufficient App Wallet balance. Please top up your AgentOS account."
+                "error": f"Task not funded. Please initialize on-chain escrow. ({detail})"
             }))
             return
 
@@ -88,27 +88,27 @@ async def run_agent_task(ctx, task_id: str, agent_id: str, input_data: dict, cre
             )
             
             exec_result = exec_envelope["result"]
-            poae = exec_envelope["proof_of_autonomous_execution"] # The cryptographic PoAE
+            receipt_sig = exec_envelope["execution_receipt"] # Deterministic Execution Receipt
             
             status = "completed" if exec_result["status"] == "success" else "failed"
             result_data = exec_result.get("data", "")
             
             # 4. Generate Protocol Receipt
-            receipt = {
+            receipt_metadata = {
                 "task_id": task_id,
                 "agent_id": agent_id,
                 "input_hash": hashlib.sha256(json.dumps(input_data).encode()).hexdigest(),
-                "poae_signature": poae,
+                "execution_receipt": receipt_sig,
                 "timestamp": str(asyncio.get_event_loop().time())
             }
 
-            # 5. Update Task with PoAE
+            # 5. Update Task with Receipt
             await db.execute(
                 update(Task).where(Task.id == task_id).values(
                     status=status, 
                     result=json.dumps(result_data),
-                    execution_receipt=receipt,
-                    poae_hash=poae
+                    execution_receipt=receipt_metadata,
+                    poae_hash=receipt_sig
                 )
             )
             
@@ -116,14 +116,14 @@ async def run_agent_task(ctx, task_id: str, agent_id: str, input_data: dict, cre
             agent.total_runs += 1
             if status == "completed":
                 agent.successful_runs += 1
-                # Wallet OS: Record earnings in agent's internal ledger
+                # Wallet OS: Record earnings (Now settled on-chain)
                 await treasury_service.record_agent_earnings(db, agent.id, agent.price)
             
             await db.commit()
             await redis_pubsub.publish(f"task:{task_id}", json.dumps({
                 "status": status, 
                 "result": result_data,
-                "poae_hash": poae
+                "receipt_hash": receipt_sig
             }))
             
             # 6. AgentOS Machine Economy: True M2M Hiring via Squads
@@ -146,14 +146,14 @@ async def run_agent_task(ctx, task_id: str, agent_id: str, input_data: dict, cre
                             depth=depth + 1
                         )
 
-            # 7. Protocol Verification: Request Switchboard Oracle to verify PoAE
-            logger.info(f"VACN Protocol: Submitting PoAE to Switchboard for task {task_id}")
-            sb_tx = await switchboard_client.create_verification_request(task_id, poae)
+            # 7. Protocol Verification: Oracle verification
+            logger.info(f"VACN Protocol: Submitting receipt for task {task_id} to Switchboard")
+            sb_tx = await switchboard_client.create_verification_request(task_id, receipt_sig)
             
-            # 8. Protocol Settlement: Propose outcome on-chain (Submit PoAE)
-            logger.info(f"VACN Protocol: Proposing settlement for escrow {task_id} via PoAE submission")
+            # 8. Protocol Settlement: Propose outcome on-chain (Submit Receipt)
+            logger.info(f"VACN Protocol: Proposing settlement for escrow {task_id} via receipt submission")
             settle_ok, tx_sig = await billing_service.settle_task_payment_onchain(
-                task_id, db_task.user_wallet, agent.creator_wallet, status == "completed", poae
+                task_id, db_task.user_wallet, agent.creator_wallet, status == "completed", receipt_sig
             )
             
             if settle_ok:
@@ -168,6 +168,105 @@ async def run_agent_task(ctx, task_id: str, agent_id: str, input_data: dict, cre
             await db.execute(update(Task).where(Task.id == task_id).values(status="failed", result=str(e)))
             await db.commit()
             await redis_pubsub.publish(f"task:{task_id}", json.dumps({"status": "failed", "error": str(e)}))
+
+async def run_agent_bidding_evaluation(ctx, order_id: str, agent_id: str, budget: float):
+    """
+    Autonomous Bidding Worker: Executes agent logic to autonomously decide
+    whether to bid on a market order.
+    """
+    logger.info(f"MARKET_ENGINE: Agent {agent_id} evaluating order {order_id}")
+    
+    async with AsyncSessionLocal() as db:
+        agent_res = await db.execute(select(Agent).where(Agent.id == agent_id))
+        agent = agent_res.scalars().first()
+        if not agent: return
+
+        # Load order details
+        from backend.modules.marketplace import service as market_service
+        order = await market_service.get_order_by_id(db, order_id)
+        if not order: return
+
+        try:
+            current_ver = next((v for v in agent.versions if v['version'] == agent.current_version), agent.versions[-1])
+            
+            # 1. Execute Agent Bidding Strategy
+            input_data = {
+                "intent": "market_bid_evaluation",
+                "order_title": order.title,
+                "order_description": order.description,
+                "budget": order.budget
+            }
+            
+            exec_envelope = await arcium_client.execute_confidential_task(
+                agent.id, 
+                current_ver['files'], 
+                input_data
+            )
+            
+            # 2. Parse Bid Decision
+            # We expect the agent to return a bid payload if interested
+            decision = exec_envelope["result"].get("data", {})
+            if isinstance(decision, dict) and decision.get("action") == "place_bid":
+                bid_amount = decision.get("amount", agent.price)
+                proposal = decision.get("proposal", f"Autonomous bid from {agent.name}")
+                
+                logger.info(f"MARKET_ENGINE: Agent {agent_id} decided to bid {bid_amount} SOL")
+                
+                from backend.schemas.marketplace import BidCreate
+                await market_service.place_bid(db, order_id, BidCreate(
+                    agent_id=agent.id,
+                    amount=bid_amount,
+                    proposal=proposal
+                ))
+                
+        except Exception as e:
+            logger.error(f"MARKET_ENGINE: Bidding evaluation failed for {agent_id}: {e}")
+
+async def verify_execution_receipts(ctx):
+    """
+    Protocol Verifier Node: Periodically scans for unverified execution receipts
+    and replays the computation to ensure honesty before settlement.
+    """
+    logger.info("VERIFIER_NODE: Scanning for execution receipts to audit...")
+    
+    async with AsyncSessionLocal() as db:
+        # Find tasks that are 'completed' but not yet 'verified' or 'verifying' on-chain
+        res = await db.execute(select(Task).where(Task.status == "completed"))
+        unverified_tasks = res.scalars().all()
+        
+        for task in unverified_tasks:
+            logger.info(f"VERIFIER_NODE: Auditing receipt for task {task.id}")
+            
+            try:
+                agent_res = await db.execute(select(Agent).where(Agent.id == task.agent_id))
+                agent = agent_res.scalars().first()
+                if not agent: continue
+
+                # 1. Replay Execution
+                current_ver = next((v for v in agent.versions if v['version'] == agent.current_version), agent.versions[-1])
+                input_data = json.loads(task.input_data)
+                
+                replay_envelope = await arcium_client.execute_confidential_task(
+                    agent.id, 
+                    current_ver['files'], 
+                    input_data
+                )
+                
+                # 2. Compare Receipts
+                original_receipt = task.poae_hash
+                replay_receipt = replay_envelope["execution_receipt"]
+                
+                if original_receipt == replay_receipt:
+                    logger.info(f"VERIFIER_NODE: Receipt verified for {task.id}. Honest execution.")
+                    # In a real protocol, this would be a signed attestation from the verifier node
+                else:
+                    logger.warning(f"VERIFIER_NODE: FRAUD DETECTED in task {task.id}! Receipt mismatch.")
+                    # Flag for slashing / dispute
+                    task.status = "disputed"
+                    await db.commit()
+                    
+            except Exception as e:
+                logger.error(f"VERIFIER_NODE: Audit failed for {task.id}: {e}")
 
 async def finalize_vacn_settlements(ctx):
     """
@@ -200,7 +299,7 @@ async def finalize_vacn_settlements(ctx):
 async def process_market_matching(ctx):
     """
     Cron-like task to run the Labor Market Matching Engine.
-    Simulates autonomous agents detecting and bidding on open orders.
+    Triggers autonomous agents to evaluate and bid on open orders.
     """
     logger.info("MARKET_ENGINE: Scanning for new labor opportunities...")
     from backend.modules.marketplace.matching_engine import MatchingEngine
@@ -330,7 +429,7 @@ async def run_workflow_step_task(ctx, run_id: str, workflow_id: str, step: dict,
             )
             
             exec_result = exec_envelope["result"]
-            poae = exec_envelope["proof_of_autonomous_execution"]
+            receipt_sig = exec_envelope["execution_receipt"]
 
             if exec_result["status"] != "success":
                 raise Exception(f"Node fault: {exec_result.get('error')}")
@@ -343,7 +442,7 @@ async def run_workflow_step_task(ctx, run_id: str, workflow_id: str, step: dict,
             completed[step_id] = {
                 "status": "completed",
                 "output": step_output,
-                "poae_receipt": poae
+                "execution_receipt": receipt_sig
             }
             db_run.completed_steps = completed
             
@@ -389,10 +488,19 @@ async def shutdown(ctx):
 from arq import cron
 
 class WorkerSettings:
-    functions = [run_agent_task, run_workflow_task, run_workflow_step_task, finalize_vacn_settlements, process_market_matching]
+    functions = [
+        run_agent_task, 
+        run_workflow_task, 
+        run_workflow_step_task, 
+        finalize_vacn_settlements, 
+        process_market_matching,
+        run_agent_bidding_evaluation,
+        verify_execution_receipts
+    ]
     cron_jobs = [
         cron(finalize_vacn_settlements, minute=None, second=0), # Run every minute
-        cron(process_market_matching, minute=None, second=30)  # Run every minute (offset by 30s)
+        cron(process_market_matching, minute=None, second=30),  # Run every minute (offset by 30s)
+        cron(verify_execution_receipts, minute=None, second=15) # Run every minute (offset by 15s)
     ]
     redis_settings = RedisSettings(host=REDIS_QUEUE_HOST, port=REDIS_QUEUE_PORT, password=REDIS_PASSWORD)
     on_startup = startup

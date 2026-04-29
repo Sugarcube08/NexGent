@@ -1,18 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { Input, TextArea } from '@/components/ui/Input';
+import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
-import { deployAgent, testAgent } from '@/lib/api';
+import { testAgent } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { 
-  Code2, 
-  Rocket, 
-  FileCode, 
-  Plus, 
-  Trash2, 
-  Play, 
+import { Zap } from 'lucide-react';
+import {
+  Code2,
+  Rocket,
+  FileCode,
+  Plus,
+  Trash2,
+  Play,
   Terminal,
   Cpu,
   Layers,
@@ -31,7 +32,7 @@ import { cn } from '@/lib/utils';
 export default function DevSpacePage() {
   const router = useRouter();
   const { isAuthenticated, login, connected } = useWalletAuth();
-  
+
   const [metadata, setMetadata] = useState({
     id: '',
     name: '',
@@ -55,12 +56,12 @@ class Agent:
 agent = Agent()`,
     'utils.py': '# Utilities library\ndef format_msg(msg):\n    return f"log: {msg}"'
   });
-  
+
   const [selectedFile, setSelectedFile] = useState('main.py');
   const [requirements, setRequirements] = useState<string[]>(['requests']);
   const [newDep, setNewDep] = useState('');
   const [entrypoint, setEntrypoint] = useState('main.py');
-  
+
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
   const [error, setError] = useState('');
@@ -96,7 +97,7 @@ agent = Agent()`,
         version: 'v' + Date.now()
       });
       setTestResult(res);
-      if (res.success) setSuccessMsg('Simulation pass verified.');
+      if (res.result) setSuccessMsg('Protocol verification pass.');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Simulation aborted');
     } finally {
@@ -135,13 +136,13 @@ agent = Agent()`,
       {/* Action Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-6 border-b border-zinc-800/40">
         <div className="space-y-1.5 text-left">
-           <h1 className="text-2xl font-bold text-zinc-100">Agent Studio</h1>
-           <p className="text-sm text-zinc-500 font-medium">Build and verify autonomous entities for the SVM network.</p>
+          <h1 className="text-2xl font-bold text-zinc-100">Agent Studio</h1>
+          <p className="text-sm text-zinc-500 font-medium">Build and verify autonomous entities for the SVM network.</p>
         </div>
         <div className="flex items-center gap-3 w-full lg:w-auto">
           <Button variant="outline" onClick={handleTest} isLoading={testing} className="flex-1 lg:flex-none h-11 px-6 rounded-xl text-xs font-semibold uppercase tracking-wider gap-2">
-            <MonitorPlay size={16} />
-            Simulate
+            <Zap size={16} className="text-yellow-500" />
+            Run Bench
           </Button>
           <Button onClick={handleDeploy} className="flex-1 lg:flex-none h-11 px-8 rounded-xl text-xs font-semibold uppercase tracking-wider gap-2 shadow-lg">
             <Rocket size={16} />
@@ -154,127 +155,127 @@ agent = Agent()`,
         {/* Workspace Panels */}
         <div className="xl:col-span-3 space-y-6 flex flex-col h-full overflow-hidden">
           <Card className="flex-1 flex flex-col overflow-hidden border-zinc-800/40 bg-[#09090b]">
-             <CardHeader className="py-4 px-6 flex flex-row items-center justify-between border-b border-zinc-800/40 bg-zinc-900/10">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Source_Explorer</span>
-                <button onClick={handleAddFile} className="p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400 hover:text-zinc-100">
-                   <Plus size={14} />
-                </button>
-             </CardHeader>
-             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
-                {Object.keys(files).map(filename => (
-                  <div 
-                    key={filename}
-                    onClick={() => setSelectedFile(filename)}
-                    className={cn(
-                      "flex items-center justify-between px-4 py-2.5 rounded-lg cursor-pointer transition-all mb-1 group",
-                      selectedFile === filename 
-                      ? 'bg-zinc-800/60 text-zinc-100 border border-zinc-700/50' 
+            <CardHeader className="py-4 px-6 flex flex-row items-center justify-between border-b border-zinc-800/40 bg-zinc-900/10">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Source_Explorer</span>
+              <button onClick={handleAddFile} className="p-1.5 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400 hover:text-zinc-100">
+                <Plus size={14} />
+              </button>
+            </CardHeader>
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+              {Object.keys(files).map(filename => (
+                <div
+                  key={filename}
+                  onClick={() => setSelectedFile(filename)}
+                  className={cn(
+                    "flex items-center justify-between px-4 py-2.5 rounded-lg cursor-pointer transition-all mb-1 group",
+                    selectedFile === filename
+                      ? 'bg-zinc-800/60 text-zinc-100 border border-zinc-700/50'
                       : 'text-zinc-500 hover:bg-zinc-900/50 hover:text-zinc-300'
-                    )}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <FileCode size={14} className={selectedFile === filename ? 'text-blue-500' : 'text-zinc-600'} />
-                      <span className="text-xs font-medium truncate">{filename}</span>
-                    </div>
-                    {entrypoint === filename && (
-                       <div className="w-1 h-1 rounded-full bg-blue-500" />
-                    )}
+                  )}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <FileCode size={14} className={selectedFile === filename ? 'text-blue-500' : 'text-zinc-600'} />
+                    <span className="text-xs font-medium truncate">{filename}</span>
                   </div>
-                ))}
-             </div>
+                  {entrypoint === filename && (
+                    <div className="w-1 h-1 rounded-full bg-blue-500" />
+                  )}
+                </div>
+              ))}
+            </div>
           </Card>
 
           <Card className="border-zinc-800/40 bg-[#09090b]">
-             <CardHeader className="py-4 px-6 border-b border-zinc-800/40 bg-zinc-900/10">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Registry_Metadata</span>
-             </CardHeader>
-             <CardContent className="p-5 space-y-4">
-                <Input 
-                  label="Agent Unique ID" 
-                  value={metadata.id}
-                  onChange={e => setMetadata({...metadata, id: e.target.value})}
-                  className="h-9 text-xs"
-                />
-                <Input 
-                  label="Display Name" 
-                  value={metadata.name}
-                  onChange={e => setMetadata({...metadata, name: e.target.value})}
-                  className="h-9 text-xs"
-                />
-             </CardContent>
+            <CardHeader className="py-4 px-6 border-b border-zinc-800/40 bg-zinc-900/10">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Registry_Metadata</span>
+            </CardHeader>
+            <CardContent className="p-5 space-y-4">
+              <Input
+                label="Agent Unique ID"
+                value={metadata.id}
+                onChange={e => setMetadata({ ...metadata, id: e.target.value })}
+                className="h-9 text-xs"
+              />
+              <Input
+                label="Display Name"
+                value={metadata.name}
+                onChange={e => setMetadata({ ...metadata, name: e.target.value })}
+                className="h-9 text-xs"
+              />
+            </CardContent>
           </Card>
         </div>
 
         {/* Editor Zone */}
         <div className="xl:col-span-9 flex flex-col gap-6 h-full overflow-hidden">
-           <Card className="flex-1 flex flex-col border-zinc-800/40 bg-[#09090b] overflow-hidden rounded-[24px]">
-              <div className="px-8 py-3 border-b border-zinc-800/40 flex items-center justify-between bg-zinc-900/10 backdrop-blur-sm">
-                 <div className="flex items-center gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                    <span className="text-xs font-semibold text-zinc-300">{selectedFile}</span>
-                 </div>
-                 <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-medium text-zinc-500 tracking-wider">Python_3.11</span>
-                    {entrypoint === selectedFile && (
-                       <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[9px] font-black uppercase rounded border border-blue-500/20">Entry_Point</span>
-                    )}
-                 </div>
+          <Card className="flex-1 flex flex-col border-zinc-800/40 bg-[#09090b] overflow-hidden rounded-[24px]">
+            <div className="px-8 py-3 border-b border-zinc-800/40 flex items-center justify-between bg-zinc-900/10 backdrop-blur-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                <span className="text-xs font-semibold text-zinc-300">{selectedFile}</span>
               </div>
-              <div className="flex-1 relative">
-                <Editor
-                  height="100%"
-                  defaultLanguage="python"
-                  theme="vs-dark"
-                  value={files[selectedFile]}
-                  onChange={(val) => setFiles({ ...files, [selectedFile]: val || '' })}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 14,
-                    lineNumbers: 'on',
-                    roundedSelection: true,
-                    scrollBeyondLastLine: false,
-                    readOnly: false,
-                    automaticLayout: true,
-                    padding: { top: 20 }
-                  }}
-                />
+              <div className="flex items-center gap-4">
+                <span className="text-[10px] font-medium text-zinc-500 tracking-wider">Python_3.11</span>
+                {entrypoint === selectedFile && (
+                  <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[9px] font-black uppercase rounded border border-blue-500/20">Entry_Point</span>
+                )}
               </div>
-           </Card>
+            </div>
+            <div className="flex-1 relative">
+              <Editor
+                height="100%"
+                defaultLanguage="python"
+                theme="vs-dark"
+                value={files[selectedFile]}
+                onChange={(val) => setFiles({ ...files, [selectedFile]: val || '' })}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  lineNumbers: 'on',
+                  roundedSelection: true,
+                  scrollBeyondLastLine: false,
+                  readOnly: false,
+                  automaticLayout: true,
+                  padding: { top: 20 }
+                }}
+              />
+            </div>
+          </Card>
 
-           {/* Console */}
-           {(testResult || error) && (
-             <Card className="h-64 border-zinc-800/40 bg-[#0c0c0e] overflow-hidden rounded-[24px] flex flex-col">
-                <CardHeader className="py-3 px-8 border-b border-zinc-800/40 flex flex-row items-center justify-between">
-                   <div className="flex items-center gap-2">
-                      <Terminal size={14} className="text-zinc-500" />
-                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Simulator_Output</span>
-                   </div>
-                   <div className="flex items-center gap-4">
-                      <button 
-                         onClick={() => copyToClipboard(error || JSON.stringify(testResult, null, 2))}
-                         className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors"
-                      >
-                         {copied ? (
-                            <><Check size={12} className="text-green-500" /> Copied</>
-                         ) : (
-                            <><Copy size={12} /> Copy_Output</>
-                         )}
-                      </button>
-                      {testResult?.success && <span className="text-[9px] font-black text-green-500 uppercase tracking-widest flex items-center gap-1.5">
-                         <CheckCircle2 size={12} /> Integrity Pass
-                      </span>}
-                   </div>
-
-                </CardHeader>
-                <div className="flex-1 p-6 overflow-y-auto custom-scrollbar font-mono text-[11px] leading-relaxed">
-                   {error ? (
-                     <p className="text-red-400">Simulation_Fault: {error}</p>
-                   ) : (
-                     <pre className="text-zinc-400">{JSON.stringify(testResult, null, 2)}</pre>
-                   )}
+          {/* Console */}
+          {(testResult || error) && (
+            <Card className="h-64 border-zinc-800/40 bg-[#0c0c0e] overflow-hidden rounded-[24px] flex flex-col">
+              <CardHeader className="py-3 px-8 border-b border-zinc-800/40 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Terminal size={14} className="text-zinc-500" />
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Bench_Output</span>
                 </div>
-             </Card>
-           )}
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => copyToClipboard(error || JSON.stringify(testResult, null, 2))}
+                    className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    {copied ? (
+                      <><Check size={12} className="text-green-500" /> Copied</>
+                    ) : (
+                      <><Copy size={12} /> Copy_Output</>
+                    )}
+                  </button>
+                  {testResult?.success && <span className="text-[9px] font-black text-green-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <CheckCircle2 size={12} /> Integrity Pass
+                  </span>}
+                </div>
+
+              </CardHeader>
+              <div className="flex-1 p-6 overflow-y-auto custom-scrollbar font-mono text-[11px] leading-relaxed">
+                {error ? (
+                  <p className="text-red-400">Bench_Fault: {error}</p>
+                ) : (
+                  <pre className="text-zinc-400">{JSON.stringify(testResult, null, 2)}</pre>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
 

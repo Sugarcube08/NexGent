@@ -6,6 +6,14 @@ import { useWalletAuth } from '@/hooks/useWalletAuth';
 import { deployAgent } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
+import dynamic from 'next/dynamic';
+
+// Dynamically import IDKitWidget with SSR disabled
+const IDKitWidget = dynamic(
+  () => import('@worldcoin/idkit').then((mod) => mod.IDKitWidget),
+  { ssr: false }
+);
+
 import { 
   Rocket, 
   CheckCircle2, 
@@ -17,10 +25,15 @@ import {
   Lock,
   Cpu,
   Activity,
-  Fingerprint
+  Fingerprint,
+  UserCheck
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { cn } from '@/lib/utils';
+// Note: VerificationLevel and ISuccessResult are used as types/enums. 
+// If they fail to import from @worldcoin/idkit, we can define them locally or use 'any'.
+import type { ISuccessResult } from '@worldcoin/idkit';
+import { VerificationLevel } from '@worldcoin/idkit';
 
 export default function DeploySpacePage() {
   const router = useRouter();
@@ -30,6 +43,7 @@ export default function DeploySpacePage() {
   const [status, setStatus] = useState<'idle' | 'validating' | 'minting' | 'done'>('idle');
   const [error, setError] = useState('');
   const [deployedAgent, setDeployedAgent] = useState<any>(null);
+  const [worldIdProof, setWorldIdProof] = useState<ISuccessResult | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -49,7 +63,13 @@ export default function DeploySpacePage() {
     setStatus('validating');
     
     try {
-      const res = await deployAgent(draft);
+      // Inject World ID proof into the deployment data
+      const deploymentData = {
+        ...draft,
+        world_id_proof: worldIdProof
+      };
+
+      const res = await deployAgent(deploymentData);
       setStatus('minting');
       setDeployedAgent(res);
       localStorage.removeItem('shoujiki_draft');
@@ -63,6 +83,10 @@ export default function DeploySpacePage() {
       setError(err.response?.data?.detail || err.message || 'Deployment failed');
       setStatus('idle');
     }
+  };
+
+  const handleWorldIdSuccess = (result: ISuccessResult) => {
+    setWorldIdProof(result);
   };
 
   if (!draft) return (
@@ -99,7 +123,7 @@ export default function DeploySpacePage() {
             </div>
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-white">Sovereign Node Deployed</h2>
-              <p className="text-zinc-500 text-sm">Your autonomous protocol node is now active with World ID and Squads Treasury.</p>
+              <p className="text-zinc-500 text-sm">Your autonomous protocol node is now active.</p>
             </div>
             
             <div className="w-full max-w-lg p-5 bg-zinc-950 border border-zinc-800 rounded-xl space-y-4">
@@ -109,14 +133,6 @@ export default function DeploySpacePage() {
                    {deployedAgent?.mint_address || 'Confirmed on Devnet'}
                  </p>
                </div>
-               {deployedAgent?.squads_vault_pda && (
-                 <div className="space-y-1 text-left">
-                   <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest block mb-2">Sovereign_Vault (Squads)</span>
-                   <p className="text-xs font-mono text-zinc-400 break-all bg-zinc-900 p-3 rounded-lg border border-zinc-800">
-                     {deployedAgent.squads_vault_pda}
-                   </p>
-                 </div>
-               )}
             </div>
 
             <div className="flex gap-4 w-full max-w-lg">
@@ -169,6 +185,33 @@ export default function DeploySpacePage() {
                     ))}
                    </div>
                 </div>
+
+                {/* World ID Widget */}
+                <div className="pt-6 border-t border-zinc-800/60">
+                   <IDKitWidget
+                      app_id="app_agentos_staging"
+                      action="mint_agent_passport"
+                      onSuccess={handleWorldIdSuccess}
+                      verification_level={VerificationLevel.Device}
+                   >
+                      {({ open }) => (
+                         <Button 
+                            variant="outline" 
+                            onClick={open}
+                            className={cn(
+                               "w-full h-12 rounded-xl border-zinc-800 gap-3 text-xs font-bold uppercase tracking-widest",
+                               worldIdProof ? "border-green-500/50 text-green-500 bg-green-500/5" : "text-zinc-400 hover:text-white"
+                            )}
+                         >
+                            {worldIdProof ? (
+                               <><CheckCircle2 size={16} /> Human Verified</>
+                            ) : (
+                               <><UserCheck size={16} /> Verify Personhood</>
+                            )}
+                         </Button>
+                      )}
+                   </IDKitWidget>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -181,8 +224,8 @@ export default function DeploySpacePage() {
               <CardContent className="p-8 space-y-10">
                 <div className="space-y-8">
                   {[
-                    { label: "Protocol Integrity", desc: "Verifying multi-file logic and VACN runtime safety.", active: status === 'validating', done: status === 'minting' },
-                    { label: "Identity & Treasury", desc: "World ID provenance and Squads V4 vault provisioning.", active: status === 'minting', done: false },
+                    { label: "Protocol Integrity", desc: "Verifying multi-file logic and WASM runtime safety.", active: status === 'validating', done: status === 'minting' },
+                    { label: "Protocol Registration", desc: "Registering agent node on the network.", active: status === 'minting', done: false },
                     { label: "Metaplex Passport", desc: "Minting on-chain identity asset (Passport).", active: false, done: false }
                   ].map((step, i) => (
                     <div key={i} className="flex gap-6">
@@ -204,12 +247,17 @@ export default function DeploySpacePage() {
                    <Button 
                      className="w-full h-14 rounded-xl font-bold text-sm tracking-widest uppercase shadow-xl"
                      onClick={handleConfirmDeploy}
-                     disabled={status !== 'idle' || !connected}
+                     disabled={status !== 'idle' || !connected || (!worldIdProof && process.env.NODE_ENV === 'production')}
                      isLoading={status !== 'idle'}
                    >
                       <Rocket size={18} />
                       Initialize Launch Sequence
                    </Button>
+                   {!worldIdProof && (
+                      <p className="text-center text-[10px] font-bold text-zinc-600 uppercase mt-4 tracking-tighter">
+                         World ID Verification Recommended for Sybil Resistance
+                      </p>
+                   )}
                 </div>
               </CardContent>
             </Card>

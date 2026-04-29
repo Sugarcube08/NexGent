@@ -101,6 +101,28 @@ async def verify_solana_payment(tx_signature: str, expected_amount_sol: float, s
             logger.error(f"Payment verification error: {str(e)}", exc_info=True)
             return False, f"Verification error: {str(e)}"
 
+async def verify_escrow_funded(task_id: str, expected_amount_sol: float):
+    """
+    Verifies that an on-chain escrow PDA for the given task_id exists and is funded.
+    """
+    async with AsyncClient(SOLANA_RPC_URL) as client:
+        try:
+            escrow_pda, _ = Pubkey.find_program_address(
+                [b"escrow", task_id.encode()],
+                ESCROW_PROGRAM_ID
+            )
+            resp = await client.get_balance(escrow_pda)
+            
+            # Allow for slight discrepancy due to fees or rounding (99%)
+            expected_lamports = int(expected_amount_sol * 1e9)
+            if resp.value >= expected_lamports * 0.99:
+                return True, str(escrow_pda)
+            else:
+                return False, f"Escrow {escrow_pda} insufficient balance: {resp.value} lamports"
+        except Exception as e:
+            logger.error(f"Escrow verification error: {e}")
+            return False, str(e)
+
 async def settle_task_payment_onchain(task_id: str, user_wallet: str, creator_wallet: str, success: bool, poae_signature: str):
     """
     Submits a Proof of Autonomous Execution (PoAE) to the on-chain escrow.
@@ -195,10 +217,10 @@ async def transfer_sol(recipient_wallet: str, amount_sol: float):
     """
     async with AsyncClient(SOLANA_RPC_URL) as client:
         try:
-            from solders.system_program import Transfer, transfer
+            from solders.system_program import TransferParams, transfer
             
             amount_lamports = int(amount_sol * 1e9)
-            ix = transfer(Transfer(
+            ix = transfer(TransferParams(
                 from_pubkey=platform_keypair.pubkey(),
                 to_pubkey=Pubkey.from_string(recipient_wallet),
                 lamports=amount_lamports
@@ -221,9 +243,8 @@ async def transfer_sol(recipient_wallet: str, amount_sol: float):
 
 async def withdraw_agent_funds(agent_id: str, requester_wallet: str):
     """
-    Withdraws funds from the agent's sovereign treasury (Squads).
-    Note: In AgentOS, funds are held on-chain in the agent's Squads PDA.
-    This method now acts as a trigger for a Squads withdrawal proposal.
+    Withdraws settled agent earnings from the agent's sovereign treasury (Squads).
+    Triggers a real on-chain withdrawal proposal.
     """
     async with AsyncSessionLocal() as db:
         from backend.db.models.models import Agent
@@ -235,9 +256,27 @@ async def withdraw_agent_funds(agent_id: str, requester_wallet: str):
         if agent.creator_wallet != requester_wallet:
             return False, "Unauthorized"
             
-        # Trigger Squads Withdrawal (Mock)
-        logger.info(f"AgentOS: Initiating Squads withdrawal for treasury {agent.squads_vault_pda}")
-        return True, "Withdrawal proposal initiated on Squads"
+        if not agent.squads_vault_pda:
+            return False, "Agent has no sovereign treasury deployed"
+
+        # Protocol Call: Create real Squads withdrawal proposal
+        from backend.modules.protocols.squads_client import SquadsClient
+        squads = SquadsClient()
+        
+        # Note: We use the default vault (index 0) for this agent.
+        proposal_id = await squads.create_withdrawal_proposal(
+            agent.squads_vault_pda, 
+            requester_wallet,
+            agent.balance
+        )
+        
+        if proposal_id:
+            # We don't reset balance yet; only after on-chain execution is confirmed.
+            logger.info(f"AgentOS: Withdrawal proposal {proposal_id} created for {agent_id}")
+            return True, proposal_id
+        else:
+            return False, "Failed to create on-chain proposal"
+
 
 async def withdraw_user_wallet_balance(db: AsyncSession, wallet_address: str, amount_sol: float):
     """

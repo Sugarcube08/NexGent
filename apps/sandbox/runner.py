@@ -7,6 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def set_limits():
     # Limit memory to 256MB
     mem_limit = 256 * 1024 * 1024
@@ -18,6 +19,7 @@ def set_limits():
     # Limit number of processes to 20
     resource.setrlimit(resource.RLIMIT_NPROC, (20, 20))
 
+
 def run_agent_code(files: dict, requirements: list, entrypoint: str, input_data: str):
     """
     Executes agent code in a hardened, fail-closed environment.
@@ -25,7 +27,9 @@ def run_agent_code(files: dict, requirements: list, entrypoint: str, input_data:
     """
     # Dynamic dependency installation is strictly forbidden for security.
     if requirements:
-        logger.warning(f"Sandbox: Ignoring dynamic requirements {requirements}. Agents must use pre-installed env.")
+        logger.warning(
+            f"Sandbox: Ignoring dynamic requirements {requirements}. Agents must use pre-installed env."
+        )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         # 1. Write agent files
@@ -33,17 +37,17 @@ def run_agent_code(files: dict, requirements: list, entrypoint: str, input_data:
             # Security: Prevent path traversal
             if ".." in filename or filename.startswith("/"):
                 return False, "", f"Invalid filename: {filename}", []
-                
+
             file_path = os.path.join(tmpdir, filename)
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, "w") as f:
                 f.write(content)
-        
+
         # 2. Create input file
         in_path = os.path.join(tmpdir, "input.json")
         with open(in_path, "w") as f:
             f.write(input_data)
-        
+
         # 3. Inject internal shoujiki module (M2M Bridge)
         shoujiki_module = """
 import json
@@ -110,21 +114,39 @@ except Exception as e:
         # Tier 1: Bubblewrap (bwrap) - Preferred
         bwrap_command = [
             "bwrap",
-            "--ro-bind", "/usr", "/usr",
-            "--symlink", "usr/bin", "/bin",
-            "--symlink", "usr/lib", "/lib",
-            "--symlink", "usr/lib64", "/lib64",
-            "--symlink", "usr/sbin", "/sbin",
-            "--dir", "/tmp",
-            "--proc", "/proc",
-            "--dev", "/dev",
-            "--unshare-all", # Isolate network, ipc, uts, user, pid
-            "--hostname", "shoujiki-sandbox",
-            "--bind", tmpdir, "/app",
-            "--chdir", "/app",
-            "python3", "wrapper.py"
+            "--ro-bind",
+            "/usr",
+            "/usr",
+            "--symlink",
+            "usr/bin",
+            "/bin",
+            "--symlink",
+            "usr/lib",
+            "/lib",
+            "--symlink",
+            "usr/lib64",
+            "/lib64",
+            "--symlink",
+            "usr/sbin",
+            "/sbin",
+            "--dir",
+            "/tmp",
+            "--proc",
+            "/proc",
+            "--dev",
+            "/dev",
+            "--unshare-all",  # Isolate network, ipc, uts, user, pid
+            "--hostname",
+            "shoujiki-sandbox",
+            "--bind",
+            tmpdir,
+            "/app",
+            "--chdir",
+            "/app",
+            "python3",
+            "wrapper.py",
         ]
-        
+
         # Tier 2: Unshare (Namespace isolation) - Secondary
         unshare_command = [
             "unshare",
@@ -132,11 +154,11 @@ except Exception as e:
             "--net",
             "--pid",
             "--fork",
-            "python3", "wrapper.py"
+            "python3",
+            "wrapper.py",
         ]
 
         process = None
-        used_method = "bwrap"
 
         try:
             # Attempt Bubblewrap
@@ -145,14 +167,17 @@ except Exception as e:
                 capture_output=True,
                 text=True,
                 timeout=15,
-                preexec_fn=set_limits
+                preexec_fn=set_limits,
             )
             # If bwrap failed due to lack of permissions/binary, try Tier 2
-            if process.returncode != 0 and ("bwrap" in process.stderr or "not permitted" in process.stderr):
+            if process.returncode != 0 and (
+                "bwrap" in process.stderr or "not permitted" in process.stderr
+            ):
                 raise PermissionError("bwrap failed")
         except (PermissionError, FileNotFoundError, subprocess.SubprocessError):
-            logger.info("Sandbox: Bubblewrap not available or failed. Falling back to Unshare.")
-            used_method = "unshare"
+            logger.info(
+                "Sandbox: Bubblewrap not available or failed. Falling back to Unshare."
+            )
             try:
                 process = subprocess.run(
                     unshare_command,
@@ -160,13 +185,17 @@ except Exception as e:
                     capture_output=True,
                     text=True,
                     timeout=15,
-                    preexec_fn=set_limits
+                    preexec_fn=set_limits,
                 )
-                if process.returncode != 0 and "Operation not permitted" in process.stderr:
-                     raise PermissionError("unshare failed")
+                if (
+                    process.returncode != 0
+                    and "Operation not permitted" in process.stderr
+                ):
+                    raise PermissionError("unshare failed")
             except Exception as e:
-                logger.warning(f"Sandbox: Isolation failed (bwrap/unshare). Falling back to direct execution for development. Error: {str(e)}")
-                used_method = "direct"
+                logger.warning(
+                    f"Sandbox: Isolation failed (bwrap/unshare). Falling back to direct execution for development. Error: {str(e)}"
+                )
                 try:
                     process = subprocess.run(
                         ["python3", "wrapper.py"],
@@ -174,32 +203,37 @@ except Exception as e:
                         capture_output=True,
                         text=True,
                         timeout=15,
-                        preexec_fn=set_limits
+                        preexec_fn=set_limits,
                     )
                 except Exception as final_e:
-                    return False, "", f"Fail-Closed: All execution methods failed. Error: {str(final_e)}", []
+                    return (
+                        False,
+                        "",
+                        f"Fail-Closed: All execution methods failed. Error: {str(final_e)}",
+                        [],
+                    )
 
         # 5. Process Output
         MAX_OUTPUT_SIZE = 100000
         stdout = process.stdout[:MAX_OUTPUT_SIZE]
         stderr = process.stderr[:MAX_OUTPUT_SIZE]
-        
+
         result = ""
         if "---RESULT_START---" in stdout:
             parts = stdout.split("---RESULT_START---")
             if len(parts) > 1 and "---RESULT_END---" in parts[1]:
                 result = parts[1].split("---RESULT_END---")[0].strip()
-        
+
         # 6. Check for M2M hire requests
         hire_requests = []
         hire_req_path = os.path.join(tmpdir, "hire_request.json")
         if os.path.exists(hire_req_path):
             try:
-                with open(hire_req_path, 'r') as f:
+                with open(hire_req_path, "r") as f:
                     data = json.load(f)
                     if isinstance(data, dict):
                         hire_requests.append(data)
-            except:
+            except Exception:
                 pass
 
         return process.returncode == 0, result, stderr, hire_requests

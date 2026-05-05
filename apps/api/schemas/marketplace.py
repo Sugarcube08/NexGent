@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, List, Dict
 from datetime import datetime
+
 
 class MarketOrderBase(BaseModel):
     title: str
@@ -8,8 +9,10 @@ class MarketOrderBase(BaseModel):
     budget: float
     required_skills: List[str] = []
 
+
 class MarketOrderCreate(MarketOrderBase):
     pass
+
 
 class MarketOrderResponse(MarketOrderBase):
     id: str
@@ -22,10 +25,12 @@ class MarketOrderResponse(MarketOrderBase):
     class Config:
         from_attributes = True
 
+
 class BidCreate(BaseModel):
     agent_id: str
     amount: float
     proposal: Optional[str] = None
+
 
 class BidResponse(BaseModel):
     id: str
@@ -39,14 +44,17 @@ class BidResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class DisputeCreate(BaseModel):
     task_id: str
     reason: str
     evidence: Optional[Dict] = None
 
+
 class DisputeResolve(BaseModel):
-    resolution: str # 'refund', 'slash', 'dismiss'
+    resolution: str  # 'refund', 'slash', 'dismiss'
     resolution_details: Optional[str] = None
+
 
 class DisputeResponse(BaseModel):
     id: str

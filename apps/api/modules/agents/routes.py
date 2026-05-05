@@ -6,13 +6,10 @@ from backend.db.session import get_db
 from backend.schemas.agent import AgentCreate, AgentResponse, AgentTestRequest
 from backend.schemas.task import RunRequest, TaskResponse, TaskHistoryResponse
 from backend.modules.agents import service as agent_service
-from backend.modules.billing import service as billing_service
-from backend.modules.sandbox.client import execute_in_sandbox
-from backend.db.models.models import Task, Payment
+from backend.db.models.models import Task
 from backend.core.dependencies import get_current_user
 from backend.core.security import verify_signature
 from backend.modules.agents.validation import validate_agent_code
-import uuid
 import logging
 import json
 
@@ -20,27 +17,30 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
 @router.post("/run", response_model=TaskResponse)
 async def run_agent(
     request: Request,
     req: RunRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
 ):
     # 1. VACN Security: Verify Wallet Signature
     # The frontend signs the JSON string of {agent_id, task_id, input_data}
     signature = request.headers.get("X-Payment-Signature")
     if not signature:
-        raise HTTPException(status_code=400, detail="Missing X-Payment-Signature header")
+        raise HTTPException(
+            status_code=400, detail="Missing X-Payment-Signature header"
+        )
 
     # Reconstruct the message that was signed
     message_dict = {
         "agent_id": req.agent_id,
         "input_data": req.input_data,
-        "task_id": req.task_id
+        "task_id": req.task_id,
     }
     # Ensure consistent serialization (matching frontend's JSON.stringify)
-    message_json = json.dumps(message_dict, separators=(',', ':'))
+    message_json = json.dumps(message_dict, separators=(",", ":"))
     message_bytes = message_json.encode()
 
     is_valid = verify_signature(current_user, signature, message_bytes)
@@ -54,83 +54,95 @@ async def run_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    # 3. Create task record (using task_id from frontend)
+    # 3. Agentic Billing: Pre-execution Solvency Check
+    # Verify user has at least the base price in their internal App Wallet
+    from backend.modules.billing import treasury_service
+
+    is_solvent = await treasury_service.check_user_solvency(
+        db, current_user, agent.price
+    )
+    if not is_solvent:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient funds in App Wallet. Required: {agent.price} SOL",
+        )
+
+    # 4. Create task record (using task_id from frontend)
     db_task = Task(
         id=req.task_id,
         agent_id=agent.id,
         user_wallet=current_user,
         input_data=str(req.input_data),
-        status="queued"
+        status="queued",
     )
     db.add(db_task)
     await db.commit()
 
-    # 4. Enqueue in background worker
+    # 5. Enqueue in background worker
     redis = request.app.state.redis_queue
     await redis.enqueue_job(
-        'run_agent_task',
+        "run_agent_task",
         task_id=req.task_id,
         agent_id=agent.id,
         input_data=req.input_data,
         creator_wallet=agent.creator_wallet,
-        price=agent.price
+        price=agent.price,
     )
 
-    
-    return TaskResponse(
-        task_id=req.task_id,
-        status="queued",
-        result=None,
-        error=None
-    )
+    return TaskResponse(task_id=req.task_id, status="queued", result=None, error=None)
+
 
 @router.post("/test")
 async def test_agent(
-    req: AgentTestRequest,
-    current_user: str = Depends(get_current_user)
+    req: AgentTestRequest, current_user: str = Depends(get_current_user)
 ):
     # Rapid development endpoint: no payment, no DB persistence
     entry_code = req.files.get(req.entrypoint, "")
     if not entry_code:
-        raise HTTPException(status_code=400, detail=f"Entrypoint {req.entrypoint} not found")
-        
+        raise HTTPException(
+            status_code=400, detail=f"Entrypoint {req.entrypoint} not found"
+        )
+
     valid, msg = validate_agent_code(entry_code, available_files=req.files)
     if not valid:
         raise HTTPException(status_code=400, detail=msg)
-    
+
     # VACN: Use Arcium compute engine for test runs
     from backend.modules.protocols.arcium_client import ArciumClient
+
     arcium = ArciumClient()
-    
+
     try:
         envelope = await arcium.execute_confidential_task(
             "test_node",
             req.files,
-            req.input_data or {"test": True}
+            req.input_data or {"test": True},
+            req.requirements,
+            req.entrypoint,
         )
         return envelope
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/tasks", response_model=List[dict])
 async def list_tasks(
-    status: Optional[str] = None,
-    limit: int = 50,
-    db: AsyncSession = Depends(get_db)
+    status: Optional[str] = None, limit: int = 50, db: AsyncSession = Depends(get_db)
 ):
     """
     Lists all tasks. Used by the Proof Explorer to display execution receipts
     and challenge period statuses.
     """
     from backend.db.models.models import Task
+
     query = select(Task).order_by(Task.created_at.desc())
     if status:
         query = query.where(Task.status == status)
     query = query.limit(limit)
-    
+
     result = await db.execute(query)
     tasks = result.scalars().all()
-    
+
     # We return a dict because the Task schema might not be fully defined for public responses
     return [
         {
@@ -139,26 +151,31 @@ async def list_tasks(
             "status": t.status,
             "poae_hash": t.poae_hash,
             "settlement_signature": t.settlement_signature,
-            "created_at": t.created_at.isoformat() if t.created_at else None
-        } for t in tasks
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in tasks
     ]
+
 
 @router.post("/deploy", response_model=AgentResponse)
 async def deploy_agent(
     req: AgentCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
 ):
     # Validate agent code structure (entrypoint)
     entry_code = req.files.get(req.entrypoint)
     if not entry_code:
-        raise HTTPException(status_code=400, detail=f"Entrypoint {req.entrypoint} not found in files")
-        
+        raise HTTPException(
+            status_code=400, detail=f"Entrypoint {req.entrypoint} not found in files"
+        )
+
     valid, msg = validate_agent_code(entry_code, available_files=req.files)
     if not valid:
         raise HTTPException(status_code=400, detail=msg)
-    
+
     return await agent_service.create_agent(db, req, current_user)
+
 
 @router.post("/deploy/zip", response_model=AgentResponse)
 async def deploy_agent_zip(
@@ -169,31 +186,33 @@ async def deploy_agent_zip(
     price: float = Form(0.01),
     entrypoint: str = Form("main.py"),
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
 ):
     import zipfile
     import io
-    
+
     # 1. Read and extract ZIP
     zip_bytes = await file.read()
     zip_buffer = io.BytesIO(zip_bytes)
-    
+
     files = {}
     with zipfile.ZipFile(zip_buffer, "r") as zip_ref:
         for filename in zip_ref.namelist():
-            if not filename.endswith('/'): # Skip directories
+            if not filename.endswith("/"):  # Skip directories
                 with zip_ref.open(filename) as f:
-                    files[filename] = f.read().decode('utf-8', errors='ignore')
-    
+                    files[filename] = f.read().decode("utf-8", errors="ignore")
+
     # 2. Validate entrypoint
     entry_code = files.get(entrypoint)
     if not entry_code:
-        raise HTTPException(status_code=400, detail=f"Entrypoint {entrypoint} not found in zip")
-        
+        raise HTTPException(
+            status_code=400, detail=f"Entrypoint {entrypoint} not found in zip"
+        )
+
     valid, msg = validate_agent_code(entry_code, available_files=list(files.keys()))
     if not valid:
         raise HTTPException(status_code=400, detail=msg)
-    
+
     # 3. Create Agent object for service
     agent_data = AgentCreate(
         id=id,
@@ -201,33 +220,37 @@ async def deploy_agent_zip(
         description=description,
         price=price,
         files=files,
-        requirements=[], # Standard pre-installed env
+        requirements=[],  # Standard pre-installed env
         entrypoint=entrypoint,
-        version="v1"
+        version="v1",
     )
-    
+
     return await agent_service.create_agent(db, agent_data, current_user)
+
 
 @router.get("/tasks", response_model=List[TaskHistoryResponse])
 async def list_my_tasks(
-    db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: str = Depends(get_current_user)
 ):
     result = await db.execute(
-        select(Task).where(Task.user_wallet == current_user).order_by(Task.created_at.desc())
+        select(Task)
+        .where(Task.user_wallet == current_user)
+        .order_by(Task.created_at.desc())
     )
     return result.scalars().all()
 
+
 @router.get("/me", response_model=List[AgentResponse])
 async def list_my_agents(
-    db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: str = Depends(get_current_user)
 ):
     return await agent_service.get_agents_by_creator(db, current_user)
+
 
 @router.get("", response_model=List[AgentResponse])
 async def list_agents(db: AsyncSession = Depends(get_db)):
     return await agent_service.get_all_agents(db)
+
 
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
@@ -236,17 +259,20 @@ async def get_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Agent not found")
     return agent
 
+
 @router.delete("/{agent_id}")
 async def delete_agent(
     agent_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
 ):
     agent = await agent_service.get_agent(db, agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     if agent.creator_wallet != current_user:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this agent")
-    
+        raise HTTPException(
+            status_code=403, detail="Not authorized to delete this agent"
+        )
+
     await agent_service.delete_agent(db, agent_id)
     return {"message": "Agent deleted successfully"}

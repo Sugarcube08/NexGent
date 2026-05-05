@@ -4,6 +4,7 @@ from .security import verify_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/verify")
 
+
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     payload = verify_token(token)
     if not payload:
@@ -12,4 +13,4 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return payload.get("sub") # The wallet address
+    return payload.get("sub")  # The wallet address

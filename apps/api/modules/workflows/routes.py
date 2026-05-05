@@ -7,29 +7,37 @@ import logging
 
 from backend.db.session import get_db
 from backend.db.models.models import Workflow, WorkflowRun
-from backend.schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowRunRequest, WorkflowRunResponse, WorkflowRunHistoryResponse
+from backend.schemas.workflow import (
+    WorkflowCreate,
+    WorkflowResponse,
+    WorkflowRunRequest,
+    WorkflowRunResponse,
+    WorkflowRunHistoryResponse,
+)
 from backend.core.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
 @router.post("", response_model=WorkflowResponse)
 async def create_workflow(
     req: WorkflowCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
 ):
     db_workflow = Workflow(
         id=req.id,
         name=req.name,
         creator_wallet=current_user,
-        steps=[step.dict() for step in req.steps]
+        steps=[step.dict() for step in req.steps],
     )
     db.add(db_workflow)
     await db.commit()
     await db.refresh(db_workflow)
     return db_workflow
+
 
 @router.post("/{workflow_id}/run", response_model=WorkflowRunResponse)
 async def run_workflow(
@@ -37,23 +45,37 @@ async def run_workflow(
     req: WorkflowRunRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    current_user: str = Depends(get_current_user),
 ):
     # 1. Get workflow
     result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
     workflow = result.scalars().first()
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
-    # 2. Create WorkflowRun
+
+    # 2. Agentic Billing: Pre-execution Solvency Check
+    # Verify user has at least the atMax budget in their App Wallet
+    from backend.modules.billing import treasury_service
+
+    is_solvent = await treasury_service.check_user_solvency(
+        db, current_user, req.max_budget
+    )
+    if not is_solvent:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient funds in App Wallet for workflow budget ({req.max_budget} SOL)",
+        )
+
+    # 3. Create WorkflowRun
     run_id = str(uuid.uuid4())
     db_run = WorkflowRun(
         id=run_id,
         workflow_id=workflow.id,
         user_wallet=current_user,
         status="queued",
-        current_step_index=0,
-        results={"steps": [], "initial_input": req.initial_input}
+        max_budget=req.max_budget,
+        total_spend=0.0,
+        results={"steps": [], "initial_input": req.initial_input},
     )
     db.add(db_run)
     await db.commit()
@@ -61,32 +83,32 @@ async def run_workflow(
     # 3. Enqueue in background worker
     redis = request.app.state.redis_queue
     await redis.enqueue_job(
-        'run_workflow_task',
+        "run_workflow_task",
         run_id=run_id,
         workflow_id=workflow.id,
-        initial_input=req.initial_input
+        initial_input=req.initial_input,
     )
-    
-    return WorkflowRunResponse(
-        run_id=run_id,
-        status="queued",
-        current_step_index=0
-    )
+
+    return WorkflowRunResponse(run_id=run_id, status="queued", current_step_index=0)
+
 
 @router.get("/me", response_model=List[WorkflowResponse])
 async def list_my_workflows(
-    db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: str = Depends(get_current_user)
 ):
-    result = await db.execute(select(Workflow).where(Workflow.creator_wallet == current_user))
+    result = await db.execute(
+        select(Workflow).where(Workflow.creator_wallet == current_user)
+    )
     return result.scalars().all()
+
 
 @router.get("/runs", response_model=List[WorkflowRunHistoryResponse])
 async def list_my_workflow_runs(
-    db: AsyncSession = Depends(get_db),
-    current_user: str = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: str = Depends(get_current_user)
 ):
     result = await db.execute(
-        select(WorkflowRun).where(WorkflowRun.user_wallet == current_user).order_by(WorkflowRun.created_at.desc())
+        select(WorkflowRun)
+        .where(WorkflowRun.user_wallet == current_user)
+        .order_by(WorkflowRun.created_at.desc())
     )
     return result.scalars().all()

@@ -1,15 +1,17 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 from runner import run_agent_code
-from typing import Dict, List, Any
+from typing import Dict, List
 
 app = FastAPI()
+
 
 class ExecutionRequest(BaseModel):
     files: Dict[str, str]
     requirements: List[str]
     entrypoint: str
-    input_data: str # JSON string
+    input_data: str  # JSON string
+
 
 @app.post("/execute")
 async def execute(req: ExecutionRequest):
@@ -18,20 +20,16 @@ async def execute(req: ExecutionRequest):
             files=req.files,
             requirements=req.requirements,
             entrypoint=req.entrypoint,
-            input_data=req.input_data
+            input_data=req.input_data,
         )
         return {
             "success": success,
             "output": output,
             "error": error,
-            "hire_requests": hire_requests
+            "hire_requests": hire_requests,
         }
     except Exception as e:
         import traceback
+
         traceback.print_exc()
-        return {
-            "success": False,
-            "output": "",
-            "error": str(e),
-            "hire_requests": []
-        }
+        return {"success": False, "output": "", "error": str(e), "hire_requests": []}

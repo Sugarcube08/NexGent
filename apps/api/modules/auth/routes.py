@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from backend.schemas.auth import WalletLoginRequest, TokenResponse
 from backend.modules.auth.service import authenticate_wallet
 
 router = APIRouter()
+
 
 @router.post("/verify", response_model=TokenResponse)
 async def verify_login(req: WalletLoginRequest):

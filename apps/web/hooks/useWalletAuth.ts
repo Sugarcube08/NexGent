@@ -12,11 +12,22 @@ export function useWalletAuth() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (connected) {
-      // Clear all old data from local storage whenever a wallet connects or changes
-      // to ensure a fresh session and prevent data leakage between sessions.
-      localStorage.clear();
-      setIsAuthenticated(false);
+    const token = localStorage.getItem('shoujiki_token');
+    const authedWallet = localStorage.getItem('shoujiki_wallet');
+
+    if (connected && publicKey) {
+      const currentWallet = publicKey.toBase58();
+      
+      if (authedWallet && authedWallet !== currentWallet) {
+        // Security Wipe: Different wallet detected, clear all old data
+        localStorage.clear();
+        setIsAuthenticated(false);
+      } else if (token) {
+        // Persistence: Same wallet or initial load with valid session
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+      }
     } else {
       setIsAuthenticated(false);
     }
@@ -47,7 +58,10 @@ export function useWalletAuth() {
       const signature = await signMessage(encodedMessage);
       const signatureStr = bs58.encode(signature);
 
-      await loginWallet(publicKey.toBase58(), signatureStr, message);
+      const res = await loginWallet(publicKey.toBase58(), signatureStr, message);
+      
+      // Store wallet address along with the token to enable persistence/wipe logic
+      localStorage.setItem('shoujiki_wallet', publicKey.toBase58());
       setIsAuthenticated(true);
     } catch (err) {
       console.error(err);

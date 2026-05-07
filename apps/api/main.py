@@ -97,6 +97,11 @@ async def lifespan(app: FastAPI):
                             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_earnings FLOAT DEFAULT 0"
                         )
                     )
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS env_vars JSON DEFAULT '{}'"
+                        )
+                    )
 
                     # Task Table Protocol Fields
                     await conn.execute(

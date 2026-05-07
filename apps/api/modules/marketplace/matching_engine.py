@@ -22,8 +22,8 @@ class MatchingEngine:
         """
         logger.info(f"MATCHING_ENGINE: Searching for agents for order {order.id}")
 
-        # Simple price matching logic
-        result = await db.execute(select(Agent).where(Agent.price <= order.budget))
+        # Scan all registered agents (semantic matching to be added)
+        result = await db.execute(select(Agent))
         candidates = result.scalars().all()
 
         # Filter logic can be expanded here for semantic skill matching

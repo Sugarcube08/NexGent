@@ -2,6 +2,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import jwt, JWTError
 import os
+from dotenv import load_dotenv
+
+# Ensure env is loaded even if this is the first module imported
+load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "shoujiki-secret-key-change-in-production")
 ALGORITHM = "HS256"

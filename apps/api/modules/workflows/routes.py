@@ -31,7 +31,8 @@ async def create_workflow(
         id=req.id,
         name=req.name,
         creator_wallet=current_user,
-        steps=[step.dict() for step in req.steps],
+        nodes=[node.dict() for node in req.nodes],
+        edges=[edge.dict() for edge in req.edges],
     )
     db.add(db_workflow)
     await db.commit()
@@ -54,16 +55,15 @@ async def run_workflow(
         raise HTTPException(status_code=404, detail="Workflow not found")
 
     # 2. Agentic Billing: Pre-execution Solvency Check
-    # Verify user has at least the atMax budget in their App Wallet
     from backend.modules.billing import treasury_service
 
     is_solvent = await treasury_service.check_user_solvency(
-        db, current_user, req.max_budget
+        db, current_user, 0.001 # Baseline check to start
     )
     if not is_solvent:
         raise HTTPException(
             status_code=402,
-            detail=f"Insufficient funds in App Wallet for workflow budget ({req.max_budget} SOL)",
+            detail=f"Insufficient funds in App Wallet to start workflow.",
         )
 
     # 3. Create WorkflowRun
@@ -75,12 +75,13 @@ async def run_workflow(
         status="queued",
         max_budget=req.max_budget,
         total_spend=0.0,
+        active_nodes=[], # Will be set by worker finding the START node
         results={"steps": [], "initial_input": req.initial_input},
     )
     db.add(db_run)
     await db.commit()
 
-    # 3. Enqueue in background worker
+    # 4. Enqueue in background worker
     redis = request.app.state.redis_queue
     await redis.enqueue_job(
         "run_workflow_task",
@@ -89,7 +90,7 @@ async def run_workflow(
         initial_input=req.initial_input,
     )
 
-    return WorkflowRunResponse(run_id=run_id, status="queued", current_step_index=0)
+    return WorkflowRunResponse(run_id=run_id, status="queued")
 
 
 @router.get("/me", response_model=List[WorkflowResponse])

@@ -6,12 +6,46 @@ class ShoujikiClient:
         self.base_url = base_url
         self.token = token
 
-    def deploy_agent(self, agent_id, name, description, price, code):
-        # ... (keep existing for backward compatibility)
-        pass
+    def deploy_agent(
+        self,
+        agent_id,
+        name,
+        description,
+        input_price=0.01,
+        output_price=0.05,
+        code="",
+        requirements=[],
+        entrypoint="main.py",
+    ):
+        headers = {}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+
+        data = {
+            "id": agent_id,
+            "name": name,
+            "description": description,
+            "price_per_million_input_tokens": input_price,
+            "price_per_million_output_tokens": output_price,
+            "files": {entrypoint: code},
+            "requirements": requirements,
+            "entrypoint": entrypoint,
+        }
+        response = requests.post(
+            f"{self.base_url}/agents/deploy", json=data, headers=headers
+        )
+        response.raise_for_status()
+        return response.json()
 
     def deploy_codebase(
-        self, agent_id, name, description, price, zip_bytes, entrypoint="main.py"
+        self,
+        agent_id,
+        name,
+        description,
+        input_price=0.01,
+        output_price=0.05,
+        zip_bytes=None,
+        entrypoint="main.py",
     ):
         headers = {}
         if self.token:
@@ -22,7 +56,8 @@ class ShoujikiClient:
             "id": agent_id,
             "name": name,
             "description": description,
-            "price": str(price),
+            "price_per_million_input_tokens": str(input_price),
+            "price_per_million_output_tokens": str(output_price),
             "entrypoint": entrypoint,
         }
 

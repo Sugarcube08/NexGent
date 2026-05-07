@@ -153,6 +153,29 @@ export const getTasks = async (status?: string) => {
   return response.data;
 };
 
+export const getWorkflows = async () => {
+  const response = await api.get('/workflows/me');
+  return response.data;
+};
+
+export const createWorkflow = async (workflowData: any) => {
+  const response = await api.post('/workflows', workflowData);
+  return response.data;
+};
+
+export const runWorkflow = async (workflowId: string, initialInput: any, maxBudget: number) => {
+  const response = await api.post(`/workflows/${workflowId}/run`, {
+    initial_input: initialInput,
+    max_budget: maxBudget
+  });
+  return response.data;
+};
+
+export const getWorkflowRuns = async () => {
+  const response = await api.get('/workflows/runs');
+  return response.data;
+};
+
 export const getDisputes = async (status?: string) => {
   const response = await api.get(`/marketplace/disputes${status ? `?status=${status}` : ''}`);
   return response.data;

@@ -2,6 +2,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# Load environment variables before any other imports that might use them
+load_dotenv()
+
 from backend.db.session import engine, Base, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select
@@ -131,7 +136,29 @@ async def lifespan(app: FastAPI):
                     )
 
 
-                    # WorkflowRun Table Agentic Budgeting
+                    # Workflow Table Node Connector Migration
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS nodes JSON DEFAULT '[]'"
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS edges JSON DEFAULT '[]'"
+                        )
+                    )
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE workflows DROP COLUMN IF EXISTS steps"
+                        )
+                    )
+
+                    # WorkflowRun Table Node Connector Migration
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS active_nodes JSON DEFAULT '[]'"
+                        )
+                    )
                     await conn.execute(
                         text(
                             "ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS max_budget FLOAT DEFAULT 0"
@@ -239,10 +266,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     agent_count = await db.execute(select(func.count(Agent.id)))
     task_count = await db.execute(select(func.count(Task.id)))
     volume_res = await db.execute(
-        select(func.sum(Agent.price))
-        .select_from(Task)
-        .join(Agent)
-        .where(Task.status == "completed")
+        select(func.sum(Agent.total_earnings))
     )
 
     return {

@@ -85,7 +85,8 @@ async def run_agent(
         agent_id=agent.id,
         input_data=req.input_data,
         creator_wallet=agent.creator_wallet,
-        price=agent.price,
+        price_per_million_input_tokens=agent.price_per_million_input_tokens,
+        price_per_million_output_tokens=agent.price_per_million_output_tokens,
     )
 
     return TaskResponse(task_id=req.task_id, status="queued", result=None, error=None)
@@ -183,7 +184,8 @@ async def deploy_agent_zip(
     id: str = Form(...),
     name: str = Form(...),
     description: str = Form(""),
-    price: float = Form(0.01),
+    price_per_million_input_tokens: float = Form(0.01),
+    price_per_million_output_tokens: float = Form(0.05),
     entrypoint: str = Form("main.py"),
     env_vars: str = Form("{}"),
     db: AsyncSession = Depends(get_db),
@@ -224,7 +226,8 @@ async def deploy_agent_zip(
         id=id,
         name=name,
         description=description,
-        price=price,
+        price_per_million_input_tokens=price_per_million_input_tokens,
+        price_per_million_output_tokens=price_per_million_output_tokens,
         files=files,
         requirements=[],  # Standard pre-installed env
         entrypoint=entrypoint,

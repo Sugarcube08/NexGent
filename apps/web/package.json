@@ -24,6 +24,7 @@
     "@solana/web3.js": "^1.98.4",
     "@sqds/multisig": "^2.1.4",
     "@x402/svm": "^2.9.0",
+    "@xyflow/react": "^12.10.2",
     "axios": "^1.15.1",
     "bignumber.js": "^9.1.2",
     "bs58": "^6.0.0",

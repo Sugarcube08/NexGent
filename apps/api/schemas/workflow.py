@@ -1,16 +1,37 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
+from enum import Enum
 
 
-class WorkflowStep(BaseModel):
-    agent_id: str
-    input_template: str  # e.g. "Process this: {{previous_result}}"
+class NodeType(str, Enum):
+    AGENT = "AGENT"
+    CONDITION = "CONDITION"
+    TRANSFORM = "TRANSFORM"
+    START = "START"
+    END = "END"
+
+
+class WorkflowNode(BaseModel):
+    id: str
+    type: NodeType
+    config: Dict[str, Any] = {}
+    # For UI positioning
+    position: Optional[Dict[str, float]] = None
+
+
+class WorkflowEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    source_handle: Optional[str] = None
+    condition: Optional[str] = None  # e.g., "result.score > 0.8" or "SUCCESS"
 
 
 class WorkflowBase(BaseModel):
     name: str
-    steps: List[WorkflowStep]
+    nodes: List[WorkflowNode]
+    edges: List[WorkflowEdge]
 
 
 class WorkflowCreate(WorkflowBase):
@@ -34,7 +55,6 @@ class WorkflowRunRequest(BaseModel):
 class WorkflowRunResponse(BaseModel):
     run_id: str
     status: str
-    current_step_index: int
 
 
 class WorkflowRunHistoryResponse(BaseModel):
@@ -42,8 +62,9 @@ class WorkflowRunHistoryResponse(BaseModel):
     workflow_id: str
     user_wallet: str
     status: str
-    current_step_index: int
     results: Optional[Dict] = None
+    # Current active nodes in the graph
+    active_nodes: Optional[List[str]] = None
     created_at: datetime
 
     class Config:

@@ -1,20 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { getAgents } from '@/lib/api';
+import { useState, useEffect } from 'react';
+import { getAgents, getWorkflows, createWorkflow, runWorkflow, getWorkflowRuns } from '@/lib/api';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { 
-  Plus, Play, Rocket, Trash2, ArrowRight, Loader2, 
-  Activity, CheckCircle2, AlertCircle, History, 
-  ChevronRight, Cpu, Layers, Info, Terminal
+  Loader2, Activity, Layers, Terminal, Share2 
 } from 'lucide-react';
-import axios from 'axios';
 import { cn } from '@/lib/utils';
 import { Alert } from '@/components/ui/Alert';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import SwarmFlowBuilder from '@/components/swarms/SwarmFlowBuilder';
 
 export default function SwarmsPage() {
   const [agents, setAgents] = useState<any[]>([]);
@@ -22,26 +17,18 @@ export default function SwarmsPage() {
   const [runs, setRuns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  
-  const [newWorkflow, setNewWorkflow] = useState({
-    name: '',
-    steps: [{ agent_id: '', input_template: '{{previous_result}}' }]
-  });
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('shoujiki_token');
-      const headers = { Authorization: `Bearer ${token}` };
-      
-      const [agentsData, workflowsRes, runsRes] = await Promise.all([
+      const [agentsData, workflowsData, runsData] = await Promise.all([
         getAgents(),
-        axios.get(`${API_URL}/workflows/me`, { headers }),
-        axios.get(`${API_URL}/workflows/runs`, { headers })
+        getWorkflows(),
+        getWorkflowRuns()
       ]);
       
       setAgents(agentsData);
-      setWorkflows(workflowsRes.data);
-      setRuns(runsRes.data);
+      setWorkflows(workflowsData);
+      setRuns(runsData);
     } catch (err) {
       console.error("Failed to fetch swarm data");
     } finally {
@@ -55,35 +42,15 @@ export default function SwarmsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const addStep = () => {
-    setNewWorkflow({
-      ...newWorkflow,
-      steps: [...newWorkflow.steps, { agent_id: '', input_template: '{{previous_result}}' }]
-    });
-  };
-
-  const removeStep = (index: number) => {
-    if (newWorkflow.steps.length <= 1) return;
-    setNewWorkflow({
-      ...newWorkflow,
-      steps: newWorkflow.steps.filter((_, i) => i !== index)
-    });
-  };
-
-  const handleCreate = async () => {
-    if (!newWorkflow.name || newWorkflow.steps.some(s => !s.agent_id)) return;
-    
+  const handleCreate = async (workflowPayload: any) => {
     setCreating(true);
     try {
       const payload = {
-        ...newWorkflow,
-        id: newWorkflow.name.toLowerCase().replace(/\s+/g, '-'),
+        ...workflowPayload,
+        id: workflowPayload.name.toLowerCase().replace(/\s+/g, '-'),
       };
-      await axios.post(`${API_URL}/workflows`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('shoujiki_token')}` }
-      });
+      await createWorkflow(payload);
       await fetchData();
-      setNewWorkflow({ name: '', steps: [{ agent_id: '', input_template: '{{previous_result}}' }] });
     } catch (err) {
       console.error(err);
     } finally {
@@ -98,13 +65,11 @@ export default function SwarmsPage() {
     setRunningId(workflowId);
     setError('');
     try {
-      await axios.post(`${API_URL}/workflows/${workflowId}/run`, { initial_input: { start: true } }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('shoujiki_token')}` }
-      });
+      await runWorkflow(workflowId, { start: true }, 0.1);
       await fetchData();
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.detail || 'Failed to start swarm. Ensure all nodes are available.');
+      setError(err.response?.data?.detail || 'Failed to start swarm. Ensure graph integrity.');
     } finally {
       setRunningId(null);
     }
@@ -113,84 +78,36 @@ export default function SwarmsPage() {
   if (loading && workflows.length === 0) return (
     <div className="flex flex-col items-center justify-center py-40 gap-4">
       <Loader2 className="animate-spin text-zinc-600" size={24} />
-      <span className="text-xs font-medium text-zinc-500 uppercase tracking-widest">Orchestrating...</span>
+      <span className="text-xs font-medium text-zinc-500 uppercase tracking-widest">Orchestrating Graph...</span>
     </div>
   );
 
   return (
     <div className="space-y-12 animate-in fade-in duration-700 pb-24 text-left">
       <div className="space-y-2 border-b border-zinc-900 pb-10">
-        <h1 className="text-3xl font-semibold text-white tracking-tight">Swarm OS</h1>
-        <p className="text-zinc-400 text-sm font-medium">Orchestrate complex DAGs of autonomous agents with A2A messaging and verifiable coordination.</p>
+        <h1 className="text-3xl font-semibold text-white tracking-tight">Node Connector</h1>
+        <p className="text-zinc-400 text-sm font-medium">Design non-deterministic agent swarms with logic gates, conditional branching, and autonomous routing.</p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-12 items-start">
-        {/* Creator */}
-        <div className="xl:col-span-4 space-y-8">
-           <Card className="border-zinc-800 bg-[#09090b]">
-              <CardHeader className="border-b border-zinc-900">
-                 <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-widest">Swarm Coordination Protocol</h3>
-              </CardHeader>
-              <CardContent className="space-y-6 pt-6">
-                 <Input 
-                   label="Workflow ID"
-                   placeholder="e.g. market-analyzer"
-                   value={newWorkflow.name}
-                   onChange={e => setNewWorkflow({...newWorkflow, name: e.target.value})}
-                 />
+      {/* Visual Flow Builder */}
+      <div className="w-full">
+        <SwarmFlowBuilder 
+          agents={agents} 
+          onSave={handleCreate} 
+          isLoading={creating} 
+        />
+      </div>
 
-                 <div className="space-y-4">
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pipeline Steps</p>
-                    {newWorkflow.steps.map((step, index) => (
-                       <div key={index} className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-3 relative group">
-                          <button onClick={() => removeStep(index)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-red-400">
-                             <Trash2 size={12} />
-                          </button>
-                          <select 
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs font-medium text-zinc-200"
-                            value={step.agent_id}
-                            onChange={e => {
-                               const steps = [...newWorkflow.steps];
-                               steps[index].agent_id = e.target.value;
-                               setNewWorkflow({...newWorkflow, steps});
-                            }}
-                          >
-                             <option value="">Select Agent...</option>
-                             {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                          </select>
-                          <textarea 
-                             className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-[10px] font-mono text-zinc-400 h-16 resize-none"
-                             placeholder="Template (e.g. {{previous_result}})"
-                             value={step.input_template}
-                             onChange={e => {
-                                const steps = [...newWorkflow.steps];
-                                steps[index].input_template = e.target.value;
-                                setNewWorkflow({...newWorkflow, steps});
-                             }}
-                          />
-                       </div>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={addStep} className="w-full border-dashed text-xs border-zinc-800 hover:border-zinc-600 h-10">
-                       <Plus size={14} /> Add Step
-                    </Button>
-                 </div>
-
-                 <Button className="w-full h-12 rounded-xl font-bold shadow-lg" onClick={handleCreate} isLoading={creating}>
-                    Register Protocol
-                 </Button>
-              </CardContent>
-           </Card>
-        </div>
-
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-12 items-start mt-12">
         {/* Dash */}
-        <div className="xl:col-span-8 space-y-12">
+        <div className="xl:col-span-12 space-y-12">
            <div className="space-y-6">
               <h2 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
-                 <Layers size={18} className="text-blue-500" /> Active Pipelines
+                 <Share2 size={18} className="text-blue-500" /> Active Swarm Protocols
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  {workflows.map(wf => (
-                    <Card key={wf.id} className="border-zinc-800/60 bg-[#0c0c0e] group">
+                    <Card key={wf.id} className="border-zinc-800/60 bg-[#0c0c0e] group hover:border-zinc-700 transition-all">
                        <CardHeader className="flex flex-row justify-between items-start pb-2">
                           <div>
                              <h4 className="font-semibold text-zinc-100">{wf.name}</h4>
@@ -201,22 +118,29 @@ export default function SwarmsPage() {
                           </div>
                        </CardHeader>
                        <CardContent className="space-y-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                             {wf.steps.map((s: any, i: number) => (
-                                <React.Fragment key={i}>
-                                   <div className="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[9px] font-bold text-zinc-500 uppercase">
-                                      {agents.find(a => a.id === s.agent_id)?.name || "node"}
-                                   </div>
-                                   {i < wf.steps.length - 1 && <ChevronRight size={12} className="text-zinc-800" />}
-                                </React.Fragment>
-                             ))}
+                          <div className="flex gap-4">
+                             <div className="text-center">
+                                <p className="text-[8px] font-black text-zinc-600 uppercase">Nodes</p>
+                                <p className="text-lg font-mono font-bold text-zinc-400">{wf.nodes?.length || 0}</p>
+                             </div>
+                             <div className="text-center">
+                                <p className="text-[8px] font-black text-zinc-600 uppercase">Edges</p>
+                                <p className="text-lg font-mono font-bold text-zinc-400">{wf.edges?.length || 0}</p>
+                             </div>
+                             <div className="text-center">
+                                <p className="text-[8px] font-black text-zinc-600 uppercase">Agents</p>
+                                <p className="text-lg font-mono font-bold text-zinc-400">
+                                    {wf.nodes?.filter((n: any) => n.type === 'AGENT').length || 0}
+                                </p>
+                             </div>
                           </div>
+                          
                           <Button variant="secondary" size="sm" className="w-full rounded-lg text-[10px] font-black tracking-widest uppercase h-9" 
                              onClick={() => handleRun(wf.id)}
                              isLoading={runningId === wf.id}
                              disabled={!!runningId}
                           >
-                             Execute Swarm
+                             Instantiate Swarm
                           </Button>
                        </CardContent>
                     </Card>
@@ -226,7 +150,7 @@ export default function SwarmsPage() {
 
            <div className="space-y-6">
               <h2 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
-                 <Terminal size={18} className="text-zinc-500" /> Recent Executions
+                 <Terminal size={18} className="text-zinc-500" /> Consensus Logs
               </h2>
               <div className="space-y-4">
                  {runs.map(run => (
@@ -252,11 +176,14 @@ export default function SwarmsPage() {
                        </div>
                        
                        <div className="flex flex-col items-end gap-1.5">
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none">Step_{run.current_step_index}</span>
+                          <div className="flex items-center gap-2">
+                             <Layers size={10} className="text-zinc-600" />
+                             <span className="text-[9px] font-mono text-zinc-500">{run.active_nodes?.length || 0} Frontier Active</span>
+                          </div>
                           <div className="w-24 h-1 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800/50 shadow-inner">
                              <div 
                                 className="h-full bg-blue-500 transition-all duration-700" 
-                                style={{ width: `${(run.current_step_index / (workflows.find(w => w.id === run.workflow_id)?.steps.length || 1)) * 100}%` }}
+                                style={{ width: run.status === 'completed' ? '100%' : '33%' }}
                              />
                           </div>
                        </div>

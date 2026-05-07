@@ -83,8 +83,9 @@ export default function AgentRunPage() {
       addLog("Identity verified.");
 
       // 2. Billing Selection: Use App Wallet
-      if (!appWallet || appWallet.balance < agent.price) {
-        throw new Error(`Insufficient App Wallet balance. Required: ${agent.price} SOL. Please deposit more funds.`);
+      const baselinePrice = agent.price_per_million_input_tokens || 0.01;
+      if (!appWallet || appWallet.balance < baselinePrice) {
+        throw new Error(`Insufficient App Wallet balance. Required baseline: ${baselinePrice} SOL. Please deposit more funds.`);
       }
       
       addLog("Using internal App Wallet (Layer 2) for instant execution.");
@@ -164,8 +165,11 @@ export default function AgentRunPage() {
 
           <div className="grid grid-cols-2 gap-4">
              <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800/60">
-                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest block mb-1">Execution Fee</span>
-                <span className="text-lg font-semibold text-white">{agent.price} SOL</span>
+                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest block mb-1">Rate (Per 1M Tokens)</span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-semibold text-white">Input: {agent.price_per_million_input_tokens} SOL</span>
+                  <span className="text-sm font-semibold text-white">Output: {agent.price_per_million_output_tokens} SOL</span>
+                </div>
              </div>
              <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800/60 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">

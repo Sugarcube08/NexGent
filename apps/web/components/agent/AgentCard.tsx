@@ -12,7 +12,8 @@ interface AgentCardProps {
     id: string;
     name: string;
     description: string;
-    price: number;
+    price_per_million_input_tokens?: number;
+    price_per_million_output_tokens?: number;
     creator_wallet: string;
     mint_address?: string;
     squads_vault_pda?: string;
@@ -59,8 +60,9 @@ export const AgentCard = ({
           </div>
         </div>
         <div className="text-right">
-           <p className="text-sm font-semibold text-zinc-100">{agent.price} SOL</p>
-           <p className="text-[10px] text-zinc-500 uppercase tracking-tighter">Per Run</p>
+           <p className="text-[10px] font-semibold text-zinc-100">{agent.price_per_million_input_tokens || 0.01} IN</p>
+           <p className="text-[10px] font-semibold text-zinc-100">{agent.price_per_million_output_tokens || 0.05} OUT</p>
+           <p className="text-[8px] text-zinc-500 uppercase tracking-tighter">Per 1M Tokens</p>
         </div>
       </CardHeader>
       

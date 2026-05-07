@@ -2,6 +2,10 @@ import argparse
 import os
 import sys
 from shoujiki_sdk.client import ShoujikiClient
+from dotenv import load_dotenv
+
+# Load local environment variables
+load_dotenv()
 
 
 def main():
@@ -17,7 +21,10 @@ def main():
     deploy_parser.add_argument("--name", required=True, help="Agent name")
     deploy_parser.add_argument("--description", help="Agent description")
     deploy_parser.add_argument(
-        "--price", required=True, type=float, help="Price in SOL"
+        "--input-price", type=float, default=0.01, help="Price in SOL per 1M input tokens"
+    )
+    deploy_parser.add_argument(
+        "--output-price", type=float, default=0.05, help="Price in SOL per 1M output tokens"
     )
     deploy_parser.add_argument(
         "--url", default="http://localhost:8000", help="API base URL"
@@ -31,7 +38,10 @@ def main():
     push_parser.add_argument("--id", required=True, help="Unique ID for the agent")
     push_parser.add_argument("--name", required=True, help="Display name for the agent")
     push_parser.add_argument(
-        "--price", required=True, type=float, help="Price in SOL per run"
+        "--input-price", type=float, default=0.01, help="Price in SOL per 1M input tokens"
+    )
+    push_parser.add_argument(
+        "--output-price", type=float, default=0.05, help="Price in SOL per 1M output tokens"
     )
     push_parser.add_argument(
         "--entry", default="main.py", help="Entrypoint file (default: main.py)"
@@ -61,7 +71,8 @@ def main():
                 agent_id=args.id,
                 name=args.name,
                 description=args.description,
-                price=args.price,
+                input_price=args.input_price,
+                output_price=args.output_price,
                 code=code,
             )
             print(
@@ -98,7 +109,8 @@ def main():
                 agent_id=args.id,
                 name=args.name,
                 description="",
-                price=args.price,
+                input_price=args.input_price,
+                output_price=args.output_price,
                 zip_bytes=zip_buffer.getvalue(),
                 entrypoint=args.entry,
             )

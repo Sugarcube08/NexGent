@@ -107,8 +107,11 @@ class Workflow(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     creator_wallet = Column(String, nullable=False, index=True)
-    # List of {id, agent_id, input_template, depends_on: [id]}
-    steps = Column(JSON, nullable=False)
+    
+    # Graph Representation
+    nodes = Column(JSON, nullable=False) # List of {id, type, config, position}
+    edges = Column(JSON, nullable=False) # List of {id, source, target, condition}
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -126,9 +129,9 @@ class WorkflowRun(Base):
     max_budget = Column(Float, default=0.0)  # atMax budget for the entire swarm
     total_spend = Column(Float, default=0.0)  # Cumulative SOL spent
 
-    # DAG Tracking
-    # List of {step_id: {status, result, receipt}}
-    completed_steps = Column(JSON, nullable=True, default={})
+    # Node-Connector Tracking
+    active_nodes = Column(JSON, nullable=True, default=[]) # Current frontier in the graph
+    completed_steps = Column(JSON, nullable=True, default={}) # {node_id: {status, result, cost}}
     results = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

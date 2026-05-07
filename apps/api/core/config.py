@@ -3,10 +3,13 @@ from pathlib import Path
 import hashlib
 from dotenv import load_dotenv
 
-# Load .env file relative to this file's directory (works in Docker and local)
-env_path = Path(__file__).parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(dotenv_path=env_path)
+# Load .env file
+# 1. Try local service .env
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
+# 2. Try root .env (for monorepo local dev)
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent.parent / ".env")
+# 3. Standard search
+load_dotenv()
 
 # Ensure the seed is exactly 32 bytes for Solana keypair generation
 _raw_seed = os.getenv("PLATFORM_SECRET_SEED", "shoujiki_platform_master_seed_32")

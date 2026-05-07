@@ -37,7 +37,8 @@ export default function DevSpacePage() {
     id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'agent-' + Date.now(),
     name: '',
     description: '',
-    price: 0.01,
+    price_per_million_input_tokens: 0.01,
+    price_per_million_output_tokens: 0.05,
   });
 
   const [envVars, setEnvVars] = useState([{ key: '', value: '' }]);
@@ -216,6 +217,24 @@ agent = Agent()`,
                 onChange={e => setMetadata({ ...metadata, name: e.target.value })}
                 className="h-9 text-xs"
               />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  label="Input Rate (per 1M)"
+                  type="number"
+                  step="0.001"
+                  value={metadata.price_per_million_input_tokens}
+                  onChange={e => setMetadata({ ...metadata, price_per_million_input_tokens: parseFloat(e.target.value) || 0 })}
+                  className="h-9 text-xs"
+                />
+                <Input
+                  label="Output Rate (per 1M)"
+                  type="number"
+                  step="0.001"
+                  value={metadata.price_per_million_output_tokens}
+                  onChange={e => setMetadata({ ...metadata, price_per_million_output_tokens: parseFloat(e.target.value) || 0 })}
+                  className="h-9 text-xs"
+                />
+              </div>
             </CardContent>
           </Card>
 

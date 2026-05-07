@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from runner import run_agent_code
 from typing import Dict, List
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI()
 

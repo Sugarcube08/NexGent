@@ -136,8 +136,8 @@ export default function DeploySpacePage() {
 
                 <div className="grid grid-cols-3 gap-4">
                   <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl">
-                    <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Fee</p>
-                    <p className="text-lg font-semibold text-zinc-200">{draft.price} <span className="text-xs font-normal text-zinc-500">SOL</span></p>
+                    <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Fee (In/Out per 1M)</p>
+                    <p className="text-sm font-semibold text-zinc-200">{draft.price_per_million_input_tokens}/{draft.price_per_million_output_tokens} <span className="text-xs font-normal text-zinc-500">SOL</span></p>
                   </div>
                   <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl">
                     <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Assets</p>

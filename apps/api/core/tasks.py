@@ -3,6 +3,10 @@ import hashlib
 import json
 import logging
 import uuid
+from dotenv import load_dotenv
+
+# Ensure env is loaded for the worker
+load_dotenv()
 
 from arq import create_pool, cron
 from arq.connections import RedisSettings
@@ -280,7 +284,7 @@ async def run_agent_bidding_evaluation(
             # We expect the agent to return a bid payload if interested
             decision = exec_envelope["result"].get("data", {})
             if isinstance(decision, dict) and decision.get("action") == "place_bid":
-                bid_amount = decision.get("amount", agent.price)
+                bid_amount = decision.get("amount", budget)
                 proposal = decision.get("proposal", f"Autonomous bid from {agent.name}")
 
                 logger.info(
@@ -427,12 +431,11 @@ async def process_market_matching(ctx):
 
 
 async def run_workflow_task(ctx, run_id: str, workflow_id: str, initial_input: dict):
-
     """
-    Swarm OS Orchestrator (Layer 3): Manages a DAG of agents.
-    Dispatches independent steps in parallel and tracks dependency resolution.
+    Swarm OS Node Connector Orchestrator: Manages execution of a graph.
+    Identifies 'active' nodes and dispatches them to worker threads.
     """
-    logger.info(f"SWARM_OS: Orchestrating workflow run {run_id}")
+    logger.info(f"SWARM_OS: Orchestrating graph run {run_id}")
     redis_pubsub = ctx["redis_pubsub"]
 
     async with AsyncSessionLocal() as db:
@@ -447,223 +450,154 @@ async def run_workflow_task(ctx, run_id: str, workflow_id: str, initial_input: d
         if not workflow:
             return
 
-        # Initialize tracking
-        if not db_run.completed_steps:
-            db_run.completed_steps = {}
-            db_run.results = {"steps": [], "initial_input": initial_input}
-            db_run.status = "running"
-
-            # Agentic Billing: Verify initial solvency for the atMax budget
-            from backend.modules.billing import treasury_service
-
-            is_solvent = await treasury_service.check_user_solvency(
-                db, db_run.user_wallet, db_run.max_budget
-            )
-            if not is_solvent:
-                db_run.status = "failed"
-                await db.commit()
-                await redis_pubsub.publish(
-                    f"workflow:{run_id}",
-                    json.dumps(
-                        {
-                            "status": "failed",
-                            "error": f"Insufficient funds for swarm budget ({db_run.max_budget} SOL)",
-                        }
-                    ),
-                )
+        # Initialize tracking and find START node
+        if not db_run.active_nodes:
+            start_node = next((n for n in workflow.nodes if n["type"] == "START"), None)
+            if not start_node:
+                logger.error(f"SWARM_OS: Workflow {workflow_id} has no START node.")
                 return
-
+            
+            db_run.active_nodes = [start_node["id"]]
+            db_run.completed_steps = {}
+            db_run.results = {"initial_input": initial_input, "nodes": {}}
+            db_run.status = "running"
             await db.commit()
 
-        # 2. Determine Ready Steps
-        # A step is 'ready' if its depends_on list is satisfied by completed_steps
-        ready_steps = []
-        all_completed = True
+        # 2. Dispatch Active Nodes
+        nodes_to_dispatch = []
+        for node_id in db_run.active_nodes:
+            # Check if already in flight
+            in_flight = await ctx["redis_queue"].get(f"node_flight:{run_id}:{node_id}")
+            if not in_flight:
+                node = next((n for n in workflow.nodes if n["id"] == node_id), None)
+                if node:
+                    nodes_to_dispatch.append(node)
 
-        for step in workflow.steps:
-            step_id = step.get("id")
-            if step_id in db_run.completed_steps:
-                continue
-
-            all_completed = False
-            depends_on = step.get("depends_on", [])
-
-            # Check if dependencies are met
-            deps_satisfied = all(
-                dep_id in db_run.completed_steps for dep_id in depends_on
-            )
-
-            # Check if currently being executed (not yet completed but enqueued)
-            in_flight = await ctx["redis_queue"].get(
-                f"wf_flight:{run_id}:{step_id}"
-            )
-
-            if deps_satisfied and not in_flight:
-                ready_steps.append(step)
-
-        # 3. Dispatch Ready Steps
-        if ready_steps:
-            for step in ready_steps:
-                step_id = step.get("id")
-                # Mark as in-flight
-                await ctx["redis_queue"].setex(
-                    f"wf_flight:{run_id}:{step_id}", 300, "1"
-                )
-
+        if nodes_to_dispatch:
+            for node in nodes_to_dispatch:
+                await ctx["redis_queue"].setex(f"node_flight:{run_id}:{node['id']}", 300, "1")
                 await ctx["redis_queue"].enqueue_job(
                     "run_workflow_step_task",
                     run_id=run_id,
                     workflow_id=workflow_id,
-                    step=step,
+                    node=node,
                     initial_input=initial_input,
                 )
-            logger.info(
-                f"SWARM_OS: Dispatched {len(ready_steps)} parallel steps for run {run_id}"
-            )
-
-        elif all_completed:
-            # 4. Finalize Swarm
-            db_run.status = "completed"
-            await db.commit()
-            await redis_pubsub.publish(
-                f"workflow:{run_id}",
-                json.dumps({"status": "completed", "results": db_run.results}),
-            )
-            logger.info(f"SWARM_OS: Swarm run {run_id} finalized.")
+            logger.info(f"SWARM_OS: Dispatched {len(nodes_to_dispatch)} nodes for run {run_id}")
 
 
 async def run_workflow_step_task(
-    ctx, run_id: str, workflow_id: str, step: dict, initial_input: dict
+    ctx, run_id: str, workflow_id: str, node: dict, initial_input: dict
 ):
     """
-    Executes a single node within a Swarm OS DAG.
+    Executes a single Node (Agent, Condition, etc.) in the graph.
     """
-    step_id = step["id"]
-    agent_id = step["agent_id"]
-    template = step["input_template"]
-
-    logger.info(f"SWARM_OS: Executing swarm node {step_id} (Agent {agent_id})")
+    node_id = node["id"]
+    node_type = node["type"]
+    logger.info(f"SWARM_OS: Executing node {node_id} ({node_type})")
     redis_pubsub = ctx["redis_pubsub"]
 
     async with AsyncSessionLocal() as db:
         run_res = await db.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))
         db_run = run_res.scalars().first()
-        if not db_run:
-            return
+        if not db_run: return
+
+        wf_res = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
+        workflow = wf_res.scalars().first()
 
         try:
-            agent_res = await db.execute(select(Agent).where(Agent.id == agent_id))
-            agent = agent_res.scalars().first()
-            if not agent:
-                raise Exception("Agent not found")
+            output = None
+            actual_cost = 0.0
+            status = "completed"
 
-            # 1. Resolve Input from dependencies
-            depends_on = step.get("depends_on", [])
-            if not depends_on:
-                prev_out = initial_input
+            # 1. Resolve Input
+            # In a graph, input usually comes from the edge's source node
+            incoming_edges = [e for e in workflow.edges if e["target"] == node_id]
+            if not incoming_edges:
+                node_input = initial_input
             else:
-                # Aggregate outputs from all listed dependencies
-                prev_out = {
-                    dep_id: db_run.completed_steps[dep_id]["output"]
-                    for dep_id in depends_on
-                }
+                # Merge outputs from all incoming nodes
+                node_input = {}
+                for edge in incoming_edges:
+                    source_id = edge["source"]
+                    if source_id in db_run.completed_steps:
+                        source_out = db_run.completed_steps[source_id].get("output")
+                        if isinstance(source_out, dict):
+                            node_input.update(source_out)
+                        else:
+                            node_input[source_id] = source_out
 
-            step_input = {"input": prev_out}
-            if template and "{{previous_result}}" in template:
-                # Simple single-dependency fallback for legacy templates
-                val = (
-                    list(prev_out.values())[0]
-                    if isinstance(prev_out, dict)
-                    else prev_out
+            # 2. Execute Node Logic
+            if node_type == "START":
+                output = initial_input
+            elif node_type == "END":
+                output = node_input
+                db_run.status = "completed"
+            elif node_type == "AGENT":
+                agent_id = node["config"].get("agent_id")
+                agent_res = await db.execute(select(Agent).where(Agent.id == agent_id))
+                agent = agent_res.scalars().first()
+                
+                current_ver = next((v for v in agent.versions if v["version"] == agent.current_version), agent.versions[-1])
+                exec_envelope = await arcium_client.execute_confidential_task(
+                    agent.id, current_ver["files"], node_input, current_ver.get("requirements", []), current_ver.get("entrypoint", ""), env_vars=agent.env_vars
                 )
-                filled = template.replace("{{previous_result}}", str(val))
-                try:
-                    step_input = json.loads(filled)
-                except Exception:
-                    step_input = {"input": filled}
+                output = exec_envelope["result"].get("data")
+                usage = exec_envelope["result"].get("usage", {})
+                
+                # Billing
+                from backend.modules.billing import treasury_service
+                actual_cost = await treasury_service.deduct_agentic_fee(
+                    db, db_run.user_wallet, agent.id, usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+                )
+            elif node_type == "CONDITION":
+                # Config looks like: {"field": "status", "value": "success"}
+                field = node["config"].get("field")
+                expected = node["config"].get("value")
+                actual = node_input.get(field)
+                output = "TRUE" if str(actual) == str(expected) else "FALSE"
 
-            # 2. VACN: Verifiable compute
-            current_ver = next(
-                (v for v in agent.versions if v["version"] == agent.current_version),
-                agent.versions[-1],
-            )
-            exec_envelope = await arcium_client.execute_confidential_task(
-                agent.id,
-                current_ver["files"],
-                step_input,
-                current_ver.get("requirements", []),
-                current_ver.get("entrypoint", ""),
-                env_vars=agent.env_vars,
-            )
-
-            exec_result = exec_envelope["result"]
-            receipt_sig = exec_envelope["execution_receipt"]
-
-            if exec_result["status"] != "success":
-                raise Exception(f"Node fault: {exec_result.get('error')}")
-
-            # 3. Commit Step Completion
-            step_output = exec_result.get("data", "")
-            usage = exec_result.get("usage", {})
-            
-            # Simple token estimation
-            input_tokens = usage.get("input_tokens", len(str(step_input)) // 4)
-            output_tokens = usage.get("output_tokens", len(str(step_output)) // 4)
-
-            # Agentic Billing: Deduct and update swarm spend
-            from backend.modules.billing import treasury_service
-
-            actual_cost = await treasury_service.deduct_agentic_fee(
-                db, db_run.user_wallet, agent.id, input_tokens, output_tokens
-            )
-            db_run.total_spend += actual_cost
-
-            # Using copy to avoid mutation issues with JSON columns
+            # 3. Commit Node Completion
             completed = dict(db_run.completed_steps)
-            completed[step_id] = {
-                "status": "completed",
-                "output": step_output,
-                "execution_receipt": receipt_sig,
-                "cost": actual_cost,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-            }
+            completed[node_id] = {"status": status, "output": output, "cost": actual_cost}
             db_run.completed_steps = completed
+            db_run.total_spend += actual_cost
+            
+            # 4. Find Next Nodes via Edges
+            next_node_ids = []
+            outgoing_edges = [e for e in workflow.edges if e["source"] == node_id]
+            
+            for edge in outgoing_edges:
+                edge_cond = edge.get("condition")
+                # Simple condition matching
+                if not edge_cond or edge_cond == output or (output == "TRUE" and edge_cond == "true") or (output == "FALSE" and edge_cond == "false"):
+                    next_node_ids.append(edge["target"])
 
-            results = dict(db_run.results)
-            results["steps"].append(
-                {
-                    "step_id": step_id,
-                    "agent_id": agent_id,
-                    "output": step_output,
-                    "cost": actual_cost,
-                }
-            )
-            db_run.results = results
-
-            # Update Node Stats
-            agent.successful_runs += 1
-            agent.total_runs += 1
+            # Update Frontier
+            active = list(db_run.active_nodes)
+            if node_id in active: active.remove(node_id)
+            for nid in next_node_ids:
+                if nid not in active: active.append(nid)
+            db_run.active_nodes = active
+            
             await db.commit()
+            await ctx["redis_queue"].delete(f"node_flight:{run_id}:{node_id}")
 
-            # 4. Trigger Orchestrator to check for next ready steps
-            await ctx["redis_queue"].delete(f"wf_flight:{run_id}:{step_id}")
-            await ctx["redis_queue"].enqueue_job(
-                "run_workflow_task",
-                run_id=run_id,
-                workflow_id=workflow_id,
-                initial_input=initial_input,
-            )
+            # Notify UI
+            await redis_pubsub.publish(f"workflow:{run_id}", json.dumps({
+                "node_id": node_id, "status": status, "output": output, "next": next_node_ids
+            }))
+
+            # 5. Trigger Orchestrator for next step
+            if db_run.status != "completed":
+                await ctx["redis_queue"].enqueue_job("run_workflow_task", run_id=run_id, workflow_id=workflow_id, initial_input=initial_input)
 
         except Exception as e:
-            logger.error(f"SWARM_OS: Node {step_id} failed: {e}")
+            logger.error(f"SWARM_OS: Node {node_id} failed: {e}", exc_info=True)
             db_run.status = "failed"
             await db.commit()
-            await ctx["redis_queue"].delete(f"wf_flight:{run_id}:{step_id}")
-            await redis_pubsub.publish(
-                f"workflow:{run_id}",
-                json.dumps({"status": "failed", "error": str(e), "step_id": step_id}),
-            )
+            await ctx["redis_queue"].delete(f"node_flight:{run_id}:{node_id}")
+            await redis_pubsub.publish(f"workflow:{run_id}", json.dumps({"status": "failed", "error": str(e), "node_id": node_id}))
 
 
 async def startup(ctx):

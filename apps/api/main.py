@@ -220,6 +220,34 @@ app.include_router(marketplace_router, prefix="/marketplace", tags=["marketplace
 app.include_router(protocol_router, prefix="/protocol", tags=["protocol"])
 
 
+@app.websocket("/ws/telemetry")
+async def websocket_telemetry(websocket: WebSocket):
+    await websocket.accept()
+    logger.info("WebSocket: Global Telemetry Client connected")
+
+    redis = app.state.redis_pubsub
+    pubsub = redis.pubsub()
+    # Subscribe to all task and workflow events globally
+    await pubsub.psubscribe("task:*", "workflow:*", "telemetry:*")
+
+    try:
+        async for message in pubsub.listen():
+            if message["type"] == "pmessage":
+                channel = message["channel"].decode("utf-8")
+                data = message["data"].decode("utf-8")
+                # We wrap the raw data with the channel context
+                payload = {"channel": channel, "data": json.loads(data) if data.startswith("{") else data}
+                await websocket.send_text(json.dumps(payload))
+    except WebSocketDisconnect:
+        logger.info("WebSocket: Telemetry Client disconnected")
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error(f"Telemetry WS error: {e}")
+    finally:
+        await pubsub.punsubscribe("task:*", "workflow:*", "telemetry:*")
+        await pubsub.close()
+
 @app.websocket("/ws/tasks/{task_id}")
 async def websocket_endpoint(websocket: WebSocket, task_id: str):
     await websocket.accept()

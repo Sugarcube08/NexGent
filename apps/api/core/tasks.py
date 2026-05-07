@@ -584,9 +584,14 @@ async def run_workflow_step_task(
             await ctx["redis_queue"].delete(f"node_flight:{run_id}:{node_id}")
 
             # Notify UI
-            await redis_pubsub.publish(f"workflow:{run_id}", json.dumps({
-                "node_id": node_id, "status": status, "output": output, "next": next_node_ids
+            await redis_pubsub.publish(f"workflow:{workflow_id}", json.dumps({
+                "status": db_run.status,
+                "node_id": node_id, 
+                "output": output, 
+                "next": next_node_ids,
+                "active_nodes": db_run.active_nodes
             }))
+            await redis_pubsub.publish("telemetry:runs", json.dumps({"action": "update"}))
 
             # 5. Trigger Orchestrator for next step
             if db_run.status != "completed":

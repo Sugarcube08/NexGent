@@ -1,35 +1,75 @@
 import React from 'react';
-import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { X, AlertCircle, CheckCircle2, Info, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface AlertProps {
-  type: 'error' | 'success' | 'info';
+  type?: 'success' | 'error' | 'info' | 'warning';
   title?: string;
   message: string;
   onClose?: () => void;
+  className?: string;
 }
 
-export const Alert = ({ type, title, message, onClose }: AlertProps) => {
-  const styles = {
-    error: 'bg-red-500/5 border-red-500/20 text-red-400',
-    success: 'bg-green-500/5 border-green-500/20 text-green-400',
-    info: 'bg-blue-500/5 border-blue-500/20 text-blue-400',
+export const Alert = ({ type = 'info', title, message, onClose, className }: AlertProps) => {
+  const types = {
+    success: {
+      bg: 'bg-green-500/10',
+      border: 'border-green-500/30',
+      text: 'text-green-400',
+      icon: CheckCircle2,
+      glow: 'shadow-[0_0_15px_rgba(34,197,94,0.2)]'
+    },
+    error: {
+      bg: 'bg-red-500/10',
+      border: 'border-red-500/30',
+      text: 'text-red-400',
+      icon: AlertCircle,
+      glow: 'shadow-[0_0_15px_rgba(239,68,68,0.2)]'
+    },
+    warning: {
+      bg: 'bg-yellow-500/10',
+      border: 'border-yellow-500/30',
+      text: 'text-yellow-400',
+      icon: AlertTriangle,
+      glow: 'shadow-[0_0_15px_rgba(234,179,8,0.2)]'
+    },
+    info: {
+      bg: 'bg-cyber-cyan/10',
+      border: 'border-cyber-cyan/30',
+      text: 'text-cyber-cyan',
+      icon: Info,
+      glow: 'shadow-[0_0_15px_rgba(0,243,255,0.2)]'
+    },
   };
 
-  const Icon = type === 'error' ? AlertCircle : type === 'success' ? CheckCircle2 : AlertCircle;
+  const config = types[type];
+  const Icon = config.icon;
 
   return (
-    <div className={cn('fixed bottom-8 right-8 z-[100] w-full max-w-sm p-4 rounded-xl border flex gap-4 animate-in slide-in-from-right-4 shadow-2xl backdrop-blur-xl', styles[type])}>
-      <Icon size={20} className="shrink-0 mt-0.5" />
-      <div className="flex-1 space-y-1">
-        {title && <p className="text-xs font-bold uppercase tracking-widest leading-none">{title}</p>}
-        <p className="text-sm font-medium leading-relaxed">{message}</p>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95, y: 20 }}
+      className={cn(
+        "fixed bottom-8 right-8 z-50 flex items-center gap-4 px-6 py-4 rounded-2xl border backdrop-blur-xl transition-all",
+        config.bg, config.border, config.text, config.glow,
+        className
+      )}
+    >
+      <Icon size={18} className="shrink-0" />
+      <div className="flex flex-col">
+        {title && <h5 className="text-[10px] font-black uppercase tracking-[0.2em] mb-0.5">{title}</h5>}
+        <p className="text-[11px] font-bold opacity-90 uppercase tracking-widest">{message}</p>
       </div>
       {onClose && (
-        <button onClick={onClose} className="p-1 hover:bg-white/5 rounded-md transition-colors h-fit">
+        <button 
+          onClick={onClose}
+          className="ml-2 p-1 hover:bg-white/10 rounded-lg transition-colors"
+        >
           <X size={14} />
         </button>
       )}
-    </div>
+    </motion.div>
   );
 };

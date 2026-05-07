@@ -1,11 +1,13 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
+import { motion, HTMLMotionProps } from 'framer-motion';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'link';
+interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'> {
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'neon';
   size?: 'sm' | 'md' | 'lg' | 'icon';
   isLoading?: boolean;
+  children?: React.ReactNode;
 }
 
 export const Button = ({
@@ -17,31 +19,34 @@ export const Button = ({
   children,
   ...props
 }: ButtonProps) => {
-  const baseStyles = 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:pointer-events-none disabled:opacity-50 gap-2 active:scale-[0.98]';
+  const baseStyles = 'relative inline-flex items-center justify-center rounded-xl text-sm font-bold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/50 disabled:pointer-events-none disabled:opacity-50 gap-2 overflow-hidden tracking-wider uppercase';
   
   const variants = {
-    primary: 'bg-zinc-100 text-zinc-900 hover:bg-white shadow-sm',
-    secondary: 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700 shadow-sm',
-    outline: 'bg-transparent border border-zinc-800 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-900',
-    ghost: 'bg-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50',
-    link: 'bg-transparent text-blue-500 hover:underline px-0 h-auto',
+    primary: 'bg-white text-black hover:bg-cyber-cyan hover:shadow-neon-cyan active:scale-95',
+    secondary: 'bg-zinc-800 text-white hover:bg-zinc-700 active:scale-95 border border-white/10',
+    outline: 'bg-transparent border border-white/10 text-zinc-300 hover:text-white hover:border-cyber-cyan/50 hover:bg-cyber-cyan/5 active:scale-95',
+    ghost: 'bg-transparent text-zinc-400 hover:text-white hover:bg-white/5 active:scale-95',
+    neon: 'bg-cyber-cyan/10 text-cyber-cyan border border-cyber-cyan/30 hover:bg-cyber-cyan/20 hover:shadow-neon-cyan active:scale-95',
   };
 
   const sizes = {
-    sm: 'h-9 px-3 text-xs',
-    md: 'h-10 px-4',
-    lg: 'h-12 px-8 text-base',
-    icon: 'h-10 w-10 p-0',
+    sm: 'h-9 px-4 text-[10px]',
+    md: 'h-11 px-6 text-[11px]',
+    lg: 'h-14 px-10 text-sm',
+    icon: 'h-11 w-11 p-0',
   };
 
   return (
-    <button
+    <motion.button
+      whileTap={{ scale: 0.96 }}
       disabled={disabled || isLoading}
       className={cn(baseStyles, variants[variant], sizes[size], className)}
       {...props}
     >
       {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-current" /> : null}
-      {children}
-    </button>
+      <span className="relative z-10 flex items-center gap-2">
+        {children}
+      </span>
+    </motion.button>
   );
 };

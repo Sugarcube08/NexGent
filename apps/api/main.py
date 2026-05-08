@@ -57,18 +57,69 @@ async def lifespan(app: FastAPI):
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
                 
-                # Manual Migration: Add missing columns if they don't exist
-                # This handles cases where the table already exists from an older version
+                # --- EXHAUSTIVE SCHEMA MIGRATION ---
+                # This ensures any legacy DB on Render is patched with all required columns
                 try:
                     from sqlalchemy import text
-                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS balance FLOAT DEFAULT 0.0"))
-                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_earnings FLOAT DEFAULT 0.0"))
-                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_runs FLOAT DEFAULT 0.0"))
-                    await conn.execute(text("ALTER TABLE agents ADD COLUMN IF NOT EXISTS successful_runs FLOAT DEFAULT 0.0"))
-                except Exception as migrate_err:
-                    logger.warning(f"Migration skip/failed (might already exist): {migrate_err}")
+                    
+                    migrations = [
+                        # User Wallets
+                        ("user_wallets", "balance", "FLOAT DEFAULT 0.0"),
+                        ("user_wallets", "allowances", "JSON DEFAULT '{}'"),
+                        
+                        # Agents
+                        ("agents", "name", "VARCHAR"),
+                        ("agents", "description", "TEXT"),
+                        ("agents", "versions", "JSON DEFAULT '[]'"),
+                        ("agents", "current_version", "VARCHAR DEFAULT 'v1'"),
+                        ("agents", "price_per_million_input_tokens", "FLOAT DEFAULT 0.01"),
+                        ("agents", "price_per_million_output_tokens", "FLOAT DEFAULT 0.05"),
+                        ("agents", "creator_wallet", "VARCHAR"),
+                        ("agents", "env_vars", "JSON DEFAULT '{}'"),
+                        ("agents", "total_runs", "FLOAT DEFAULT 0.0"),
+                        ("agents", "successful_runs", "FLOAT DEFAULT 0.0"),
+                        ("agents", "balance", "FLOAT DEFAULT 0.0"),
+                        ("agents", "total_earnings", "FLOAT DEFAULT 0.0"),
+                        ("agents", "lineage_parent_id", "VARCHAR"),
+                        
+                        # Tasks
+                        ("tasks", "agent_id", "VARCHAR"),
+                        ("tasks", "user_wallet", "VARCHAR"),
+                        ("tasks", "input_data", "TEXT"),
+                        ("tasks", "result", "TEXT"),
+                        ("tasks", "status", "VARCHAR DEFAULT 'queued'"),
+                        ("tasks", "depth", "FLOAT DEFAULT 0.0"),
+                        ("tasks", "input_tokens", "FLOAT DEFAULT 0.0"),
+                        ("tasks", "output_tokens", "FLOAT DEFAULT 0.0"),
+                        ("tasks", "poae_hash", "VARCHAR"),
+                        
+                        # Workflows
+                        ("workflows", "name", "VARCHAR"),
+                        ("workflows", "creator_wallet", "VARCHAR"),
+                        ("workflows", "nodes", "JSON DEFAULT '[]'"),
+                        ("workflows", "edges", "JSON DEFAULT '[]'"),
+                        
+                        # Workflow Runs
+                        ("workflow_runs", "workflow_id", "VARCHAR"),
+                        ("workflow_runs", "user_wallet", "VARCHAR"),
+                        ("workflow_runs", "status", "VARCHAR DEFAULT 'queued'"),
+                        ("workflow_runs", "max_budget", "FLOAT DEFAULT 0.0"),
+                        ("workflow_runs", "total_spend", "FLOAT DEFAULT 0.0"),
+                        ("workflow_runs", "active_nodes", "JSON DEFAULT '[]'"),
+                        ("workflow_runs", "completed_steps", "JSON DEFAULT '{}'"),
+                        ("workflow_runs", "results", "JSON"),
+                    ]
+                    
+                    for table, column, col_type in migrations:
+                        try:
+                            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"))
+                        except Exception as e:
+                            logger.warning(f"Migration failed for {table}.{column}: {e}")
 
-            logger.info("Database verified and migrated.")
+                except Exception as migrate_err:
+                    logger.warning(f"Global migration skip/failed: {migrate_err}")
+
+            logger.info("Database verified and exhaustive migration complete.")
             break
         except Exception as e:
             if i < max_retries - 1:

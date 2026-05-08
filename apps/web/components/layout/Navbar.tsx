@@ -3,64 +3,64 @@
 import React from 'react';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
 import { Button } from '@/components/ui/Button';
-import { Wallet, Bell, Search, Hexagon, ChevronDown } from 'lucide-react';
+import { Wallet, Bell, Search, Hexagon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { truncateWallet } from '@/lib/utils';
 
 export const Navbar = () => {
-  const { connected, login, publicKey } = useWalletAuth();
+  const { connected, login, publicKey, isAuthenticated } = useWalletAuth();
 
   return (
     <motion.nav 
-      initial={{ y: -20, opacity: 0 }}
+      initial={{ y: -10, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="sticky top-0 z-40 w-full px-8 py-6 pointer-events-none"
+      className="sticky top-0 z-40 w-full px-12 py-8 pointer-events-none"
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between pointer-events-auto">
-        {/* Breadcrumbs / Context */}
+        {/* Status */}
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyber-cyan to-cyber-blue flex items-center justify-center shadow-neon-cyan/20">
-            <Hexagon size={20} className="text-black fill-black" />
-          </div>
-          <div className="hidden sm:block">
-            <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Network_Status</h2>
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider">Mainnet_Beta_Alpha</span>
-            </div>
+          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06] shadow-sm">
+            <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse" />
+            <span className="text-xs font-semibold text-zinc-300 tracking-tight uppercase">SVM_Network_Online</span>
           </div>
         </div>
 
-        {/* Floating Search (Aesthetic) */}
+        {/* Search */}
         <div className="hidden lg:flex flex-1 max-w-md mx-12">
           <div className="w-full relative group">
-            <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-cyber-cyan transition-colors" />
+            <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-white transition-colors" />
             <input 
               type="text" 
-              placeholder="Search Agents, Tasks, Protocols..."
-              className="w-full bg-white/5 border border-white/10 rounded-xl h-10 pl-11 pr-4 text-xs font-medium text-zinc-300 focus:outline-none focus:border-cyber-cyan/30 focus:bg-white/[0.08] transition-all"
+              placeholder="Search registry..."
+              className="w-full bg-white/[0.02] border border-white/[0.06] rounded-xl h-11 pl-12 pr-4 text-sm font-medium text-zinc-300 focus:outline-none focus:border-white/[0.12] focus:bg-white/[0.05] transition-all"
             />
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
-          <button className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-zinc-400 hover:text-white hover:border-white/20 transition-all">
+        <div className="flex items-center gap-4">
+          <button className="w-11 h-11 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-center text-zinc-400 hover:text-white hover:border-white/20 transition-all shadow-sm">
             <Bell size={18} />
           </button>
           
           {connected ? (
-            <div className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-all group cursor-pointer">
-              <div className="flex flex-col items-end px-2">
-                <span className="text-[9px] font-black text-zinc-500 uppercase">Operator</span>
-                <span className="text-[10px] font-mono font-bold text-zinc-100">{truncateWallet(publicKey?.toString() || '')}</span>
+            isAuthenticated ? (
+              <div className="flex items-center gap-3 pl-4 pr-1.5 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.15] transition-all cursor-pointer group shadow-sm">
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Operator</span>
+                  <span className="text-xs font-semibold text-zinc-100 font-mono">{truncateWallet(publicKey?.toString() || '')}</span>
+                </div>
+                <div className="w-9 h-9 rounded-lg bg-white text-black flex items-center justify-center shadow-lg group-hover:bg-zinc-200 transition-colors">
+                  <Wallet size={16} />
+                </div>
               </div>
-              <div className="w-8 h-8 rounded-lg bg-cyber-cyan/10 flex items-center justify-center text-cyber-cyan">
-                <Wallet size={16} />
-              </div>
-            </div>
+            ) : (
+              <Button variant="primary" size="md" onClick={login} className="h-11 shadow-xl">
+                Authorize_Session
+              </Button>
+            )
           ) : (
-            <Button variant="neon" size="sm" onClick={login} className="h-10 rounded-xl px-6">
+            <Button variant="primary" size="md" onClick={login} className="h-11 shadow-xl">
               Connect_Node
             </Button>
           )}

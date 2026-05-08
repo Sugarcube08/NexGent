@@ -9,37 +9,42 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-space-grotesk)"],
-        mono: ["var(--font-jetbrains-mono)"],
+        sans: ["var(--font-space-grotesk)", "system-ui", "sans-serif"],
+        mono: ["var(--font-jetbrains-mono)", "monospace"],
       },
       colors: {
+        background: "#0a0a0c",
+        foreground: "#fafafa",
         cyber: {
           cyan: "#00f3ff",
-          magenta: "#ff00ff",
-          yellow: "#f3ff00",
           blue: "#2d00ff",
-          background: "#020204",
+          magenta: "#ff00ff",
+          muted: {
+            cyan: "rgba(0, 243, 255, 0.15)",
+            white: "rgba(255, 255, 255, 0.05)",
+          }
         },
       },
       backgroundImage: {
-        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
-        "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
-        "glass-gradient": "linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%)",
-        "cyber-grid": "linear-gradient(to right, #ffffff05 1px, transparent 1px), linear-gradient(to bottom, #ffffff05 1px, transparent 1px)",
+        "gradient-main": "radial-gradient(circle at 50% -20%, rgba(0, 243, 255, 0.08) 0%, transparent 40%)",
+        "glass-gradient": "linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%)",
       },
       boxShadow: {
-        "neon-cyan": "0 0 10px rgba(0, 243, 255, 0.5), 0 0 20px rgba(0, 243, 255, 0.2)",
-        "neon-magenta": "0 0 10px rgba(255, 0, 255, 0.5), 0 0 20px rgba(255, 0, 255, 0.2)",
-        "glass-inner": "inset 0 1px 1px 0 rgba(255, 255, 255, 0.05)",
+        "soft-glow": "0 0 20px rgba(0, 243, 255, 0.1)",
+        "premium-card": "0 20px 40px -15px rgba(0, 0, 0, 0.5)",
       },
       animation: {
-        "pulse-slow": "pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "glow-cyan": "glow-cyan 2s ease-in-out infinite alternate",
+        "fade-in": "fade-in 0.5s ease-out forwards",
+        "slide-up": "slide-up 0.5s ease-out forwards",
       },
       keyframes: {
-        "glow-cyan": {
-          "0%": { boxShadow: "0 0 5px rgba(0, 243, 255, 0.2)" },
-          "100%": { boxShadow: "0 0 20px rgba(0, 243, 255, 0.6)" },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        "slide-up": {
+          "0%": { transform: "translateY(10px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
         },
       },
     },

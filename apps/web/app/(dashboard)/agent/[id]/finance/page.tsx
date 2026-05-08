@@ -6,7 +6,7 @@ import { getAgent, getAgentCredit, refreshCreditScore, requestAgentLoan, getAgen
 import { 
   Loader2, ArrowLeft, BarChart3, TrendingUp, 
   Wallet, Landmark, Receipt, AlertCircle, 
-  CheckCircle2, Gauge, Zap, Info
+  CheckCircle2, Gauge, Zap, Info, Scale
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
@@ -26,6 +26,9 @@ export default function AgentFinancePage() {
   const [loans, setLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loanAmount, setLoanAmount] = useState('0.1');
+  const [bondAmount, setBondAmount] = useState('1.0');
+  const [bondDays, setBondDays] = useState('30');
+  const [yieldAmount, setYieldAmount] = useState('0.5');
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -77,6 +80,34 @@ export default function AgentFinancePage() {
       fetchData();
     } catch (err: any) {
       setError(err.response?.data?.detail || "Loan application rejected.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleIssueBond = async () => {
+    setActionLoading(true);
+    try {
+      const { issueAgentBond } = await import('@/lib/api');
+      await issueAgentBond(agentId, parseFloat(bondAmount), parseInt(bondDays));
+      setSuccess(`Revenue-backed bond of ${bondAmount} SOL issued successfully.`);
+      fetchData();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Bond issuance failed.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeployYield = async () => {
+    setActionLoading(true);
+    try {
+      const { deployToYield } = await import('@/lib/api');
+      const res = await deployToYield(agentId, parseFloat(yieldAmount));
+      setSuccess(`Yield deployment proposal created: ${res.proposal_id}`);
+      fetchData();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Yield deployment failed.");
     } finally {
       setActionLoading(false);
     }
@@ -176,6 +207,73 @@ export default function AgentFinancePage() {
                     {credit?.utilization?.toFixed(4)} <span className="text-xs text-zinc-500 font-medium">SOL</span>
                  </p>
                  <p className="text-[10px] text-zinc-600 uppercase mt-1">Current outstanding debt</p>
+              </Card>
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="border-zinc-800 bg-[#09090b] p-6 shadow-xl space-y-6">
+                 <div className="space-y-2">
+                    <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                       <Scale size={18} className="text-purple-500" /> Issue Agent Bond
+                    </h3>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed">
+                       Issue revenue-backed derivatives against future projected earnings. Requires credit score {'>'} 700.
+                    </p>
+                 </div>
+                 <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                       <Input 
+                          type="number" 
+                          placeholder="Amount (SOL)"
+                          value={bondAmount} 
+                          onChange={(e: any) => setBondAmount(e.target.value)}
+                          className="bg-zinc-950 border-zinc-800 text-white font-mono h-10 text-xs"
+                       />
+                       <Input 
+                          type="number" 
+                          placeholder="Days"
+                          value={bondDays} 
+                          onChange={(e: any) => setBondDays(e.target.value)}
+                          className="bg-zinc-950 border-zinc-800 text-white font-mono h-10 text-xs"
+                       />
+                    </div>
+                    <Button 
+                       className="w-full h-10 rounded-xl text-xs font-bold bg-purple-500 text-white hover:bg-purple-600 transition-all"
+                       onClick={handleIssueBond}
+                       isLoading={actionLoading}
+                       disabled={!connected || credit?.credit_score < 700}
+                    >
+                       Issue Bond Contract
+                    </Button>
+                 </div>
+              </Card>
+
+              <Card className="border-zinc-800 bg-[#09090b] p-6 shadow-xl space-y-6">
+                 <div className="space-y-2">
+                    <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                       <BarChart3 size={18} className="text-cyan-500" /> Yield Deployment
+                    </h3>
+                    <p className="text-[11px] text-zinc-500 leading-relaxed">
+                       Deploy idle treasury balance to external DeFi protocols (Kamino/MarginFi) via Squads V4.
+                    </p>
+                 </div>
+                 <div className="space-y-3">
+                    <Input 
+                       type="number" 
+                       placeholder="Amount (SOL)"
+                       value={yieldAmount} 
+                       onChange={(e: any) => setYieldAmount(e.target.value)}
+                       className="bg-zinc-950 border-zinc-800 text-white font-mono h-10 text-xs"
+                    />
+                    <Button 
+                       className="w-full h-10 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700 transition-all"
+                       onClick={handleDeployYield}
+                       isLoading={actionLoading}
+                       disabled={!connected || agent?.balance < parseFloat(yieldAmount)}
+                    >
+                       Propose Yield Deployment
+                    </Button>
+                 </div>
               </Card>
            </div>
 

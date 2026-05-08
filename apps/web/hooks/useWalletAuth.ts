@@ -1,4 +1,5 @@
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useState, useEffect } from 'react';
 import bs58 from 'bs58';
 import { loginWallet } from '@/lib/api';
@@ -7,6 +8,7 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 export function useWalletAuth() {
   const { connection } = useConnection();
   const { publicKey, signMessage, connected, disconnect } = useWallet();
+  const { setVisible } = useWalletModal();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -50,7 +52,11 @@ export function useWalletAuth() {
   }, [connected, publicKey, connection]);
 
   const login = async () => {
-    if (!publicKey || !signMessage) return;
+    if (!connected || !publicKey || !signMessage) {
+      setVisible(true);
+      return;
+    }
+    
     try {
       setLoading(true);
       const message = "Login to Shoujiki AgentOS";

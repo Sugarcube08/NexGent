@@ -521,13 +521,19 @@ async def run_workflow_step_task(
                 for edge in incoming_edges:
                     source_id = edge["source"]
                     if source_id in db_run.completed_steps:
-                        source_out = db_run.completed_steps[source_id].get("output")
+                        step_data = db_run.completed_steps[source_id]
+                        source_out = step_data.get("output")
                         if isinstance(source_out, dict):
                             node_input.update(source_out)
                         else:
                             node_input[source_id] = source_out
+                        
+                        # Phase 1: ZK Swarm Rollups - Propagate recursive proofs
+                        if step_data.get("zk_proof"):
+                            node_input["_parent_zk_proof"] = step_data.get("zk_proof")
 
             # 2. Execute Node Logic
+            zk_proof_artifact = None
             if node_type == "START":
                 output = initial_input
             elif node_type == "END":
@@ -544,6 +550,7 @@ async def run_workflow_step_task(
                 )
                 output = exec_envelope["result"].get("data")
                 usage = exec_envelope["result"].get("usage", {})
+                zk_proof_artifact = exec_envelope.get("zk_proof")
                 
                 # Billing
                 from backend.modules.billing import treasury_service
@@ -559,7 +566,12 @@ async def run_workflow_step_task(
 
             # 3. Commit Node Completion
             completed = dict(db_run.completed_steps)
-            completed[node_id] = {"status": status, "output": output, "cost": actual_cost}
+            completed[node_id] = {
+                "status": status,
+                "output": output,
+                "cost": actual_cost,
+                "zk_proof": zk_proof_artifact
+            }
             db_run.completed_steps = completed
             db_run.total_spend += actual_cost
             

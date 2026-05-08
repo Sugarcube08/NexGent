@@ -194,4 +194,19 @@ export const withdrawAgentBalance = async (id: string) => {
   return response.data;
 };
 
+export const mutateAgent = async (id: string, performanceFeedback: string) => {
+  const response = await api.post(`/agents/mutate/${id}`, { performance_feedback: performanceFeedback });
+  return response.data;
+};
+
+export const issueAgentBond = async (id: string, amount: number, durationDays: number) => {
+  const response = await api.post(`/billing/agent/${id}/bond`, { amount, duration_days: durationDays });
+  return response.data;
+};
+
+export const deployToYield = async (id: string, amount: number) => {
+  const response = await api.post(`/billing/agent/${id}/yield`, { amount });
+  return response.data;
+};
+
 export default api;

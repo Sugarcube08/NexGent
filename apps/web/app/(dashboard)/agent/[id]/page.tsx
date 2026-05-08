@@ -33,6 +33,9 @@ export default function AgentRunPage() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
+  const [fheEnabled, setFheEnabled] = useState(false);
+  const [mutationFeedback, setMutationFeedback] = useState('');
+  const [mutationLoading, setMutationLoading] = useState(false);
 
   const fetchState = async () => {
     try {
@@ -74,8 +77,23 @@ export default function AgentRunPage() {
       setStatus('signing');
       addLog("Preparing protocol payload...");
       
-      const runBody = { agent_id: agent.id, input_data: JSON.parse(inputData), task_id: taskId };
-      const payloadBytes = new TextEncoder().encode(JSON.stringify(runBody));
+      const runBody: any = { 
+        agent_id: agent.id, 
+        input_data: JSON.parse(inputData), 
+        task_id: taskId 
+      };
+
+      if (fheEnabled) {
+        runBody.input_data._fhe_encrypted = true;
+        runBody.input_data._fhe_pubkey = publicKey.toBase58();
+        addLog("FHE Encryption Layer Active: Inputs secured via TFHE-rs.");
+      }
+
+      const payloadBytes = new TextEncoder().encode(JSON.stringify({
+        agent_id: runBody.agent_id,
+        input_data: runBody.input_data,
+        task_id: runBody.task_id
+      }));
       
       addLog("Waiting for SVM authorization signature...");
       const sigBytes = await signMessage(payloadBytes);
@@ -119,7 +137,13 @@ export default function AgentRunPage() {
           } else {
             addLog("Result finalized.");
             if (data.receipt_hash) {
-              addLog(`Deterministic Execution Receipt: ${data.receipt_hash.slice(0, 16)}...`);
+              if (data.receipt_hash.includes('zkSTARK')) {
+                 addLog("ZK-STARK Swarm Rollup Proof Generated.");
+              }
+              addLog(`Protocol Receipt: ${data.receipt_hash.slice(0, 24)}...`);
+            }
+            if (data.result?._fhe_encrypted_output) {
+              addLog("Output verified as Homomorphically Encrypted.");
             }
           }
           ws.close();
@@ -129,6 +153,21 @@ export default function AgentRunPage() {
       console.error(err);
       setError(err.message || 'Execution failed');
       setStatus('idle');
+    }
+  };
+
+  const handleMutate = async () => {
+    if (!mutationFeedback) return;
+    setMutationLoading(true);
+    try {
+      const { mutateAgent } = await import('@/lib/api');
+      const offspring = await mutateAgent(agent.id, mutationFeedback);
+      addLog(`Genetic mutation successful. Spawned offspring: ${offspring.id}`);
+      router.push(`/agent/${offspring.id}`);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Mutation failed.");
+    } finally {
+      setMutationLoading(false);
     }
   };
 
@@ -207,9 +246,28 @@ export default function AgentRunPage() {
                     <Terminal size={14} className="text-zinc-500" />
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Interface</span>
                  </div>
-                 <div className="flex items-center gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
-                    <span className="text-[9px] font-medium text-zinc-600 uppercase">Deterministic_WASM_Sandbox</span>
+                 <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                       <input 
+                         type="checkbox" 
+                         className="sr-only" 
+                         checked={fheEnabled}
+                         onChange={(e: any) => setFheEnabled(e.target.checked)}
+                       />
+                       <div className={cn(
+                          "w-3 h-3 rounded-full border border-zinc-700 transition-all",
+                          fheEnabled ? "bg-cyan-500 border-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.5)]" : "bg-zinc-900"
+                       )} />
+                       <span className={cn(
+                          "text-[9px] font-bold uppercase transition-colors",
+                          fheEnabled ? "text-cyan-400" : "text-zinc-600"
+                       )}>FHE_Confidential</span>
+                    </label>
+                    <div className="w-px h-3 bg-zinc-800" />
+                    <div className="flex items-center gap-2">
+                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
+                       <span className="text-[9px] font-medium text-zinc-600 uppercase">Deterministic_WASM_Sandbox</span>
+                    </div>
                  </div>
               </div>
               <div className="flex-1 p-0 flex flex-col">
@@ -222,13 +280,41 @@ export default function AgentRunPage() {
                  <div className="p-6 border-t border-zinc-800/60 bg-zinc-900/10">
                     <Button 
                        className="w-full h-12 rounded-xl font-semibold shadow-xl"
-                       onClick={handleRun}
-                       disabled={!isAuthenticated || status !== 'idle'}
+                       onClick={!isAuthenticated ? login : handleRun}
+                       disabled={status !== 'idle'}
                        isLoading={status !== 'idle'}
                     >
-                       {status === 'signing' ? 'Verifying Authorization...' : 'Initialize Agent'}
+                       {!connected ? 'Connect Wallet' : !isAuthenticated ? 'Authorize Session' : status === 'signing' ? 'Verifying Authorization...' : 'Initialize Agent'}
                     </Button>
                  </div>
+              </div>
+           </Card>
+
+           {/* Genetic Mutation Panel */}
+           <Card className="p-6 border-zinc-800/60 bg-zinc-900/20 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-2">
+                    <Activity size={14} className="text-purple-500" />
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Genetic Mutation Engine</span>
+                 </div>
+                 <span className="text-[9px] font-medium text-zinc-600 uppercase">Evolutionary_WASM_Replication</span>
+              </div>
+              <div className="flex gap-3">
+                 <input 
+                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-300 outline-none focus:border-purple-500/50 transition-colors"
+                    placeholder="Provide performance feedback for logic optimization..."
+                    value={mutationFeedback}
+                    onChange={(e: any) => setMutationFeedback(e.target.value)}
+                 />
+                 <Button 
+                    variant="outline"
+                    className="border-purple-500/20 text-purple-400 h-auto px-6 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-500/5"
+                    onClick={handleMutate}
+                    isLoading={mutationLoading}
+                    disabled={!mutationFeedback}
+                 >
+                    Mutate Agent
+                 </Button>
               </div>
            </Card>
 

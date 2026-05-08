@@ -57,6 +57,9 @@ class Agent(Base):
     credential_registry_address = Column(
         String, nullable=True
     )  # W3C Attestations / On-chain Identity Graph
+    lineage_parent_id = Column(
+        String, ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
+    )  # Genetic mutation lineage
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

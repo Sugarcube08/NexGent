@@ -19,26 +19,26 @@ export const Button = ({
   children,
   ...props
 }: ButtonProps) => {
-  const baseStyles = 'relative inline-flex items-center justify-center rounded-xl text-sm font-bold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/50 disabled:pointer-events-none disabled:opacity-50 gap-2 overflow-hidden tracking-wider uppercase';
+  const baseStyles = 'relative inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/30 disabled:pointer-events-none disabled:opacity-50 gap-2 overflow-hidden';
   
   const variants = {
-    primary: 'bg-white text-black hover:bg-cyber-cyan hover:shadow-neon-cyan active:scale-95',
-    secondary: 'bg-zinc-800 text-white hover:bg-zinc-700 active:scale-95 border border-white/10',
-    outline: 'bg-transparent border border-white/10 text-zinc-300 hover:text-white hover:border-cyber-cyan/50 hover:bg-cyber-cyan/5 active:scale-95',
-    ghost: 'bg-transparent text-zinc-400 hover:text-white hover:bg-white/5 active:scale-95',
-    neon: 'bg-cyber-cyan/10 text-cyber-cyan border border-cyber-cyan/30 hover:bg-cyber-cyan/20 hover:shadow-neon-cyan active:scale-95',
+    primary: 'bg-white text-black hover:bg-zinc-200 active:scale-[0.98]',
+    secondary: 'bg-zinc-900 text-white hover:bg-zinc-800 border border-white/10 active:scale-[0.98]',
+    outline: 'bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:border-white/20 hover:bg-white/[0.03] active:scale-[0.98]',
+    ghost: 'bg-transparent text-zinc-400 hover:text-white hover:bg-white/[0.05] active:scale-[0.98]',
+    neon: 'bg-cyber-cyan/10 text-cyber-cyan border border-cyber-cyan/20 hover:bg-cyber-cyan/20 active:scale-[0.98] shadow-soft-glow',
   };
 
   const sizes = {
-    sm: 'h-9 px-4 text-[10px]',
-    md: 'h-11 px-6 text-[11px]',
-    lg: 'h-14 px-10 text-sm',
+    sm: 'h-9 px-4 text-xs',
+    md: 'h-11 px-6 text-sm',
+    lg: 'h-14 px-10 text-base',
     icon: 'h-11 w-11 p-0',
   };
 
   return (
     <motion.button
-      whileTap={{ scale: 0.96 }}
+      whileTap={{ scale: 0.98 }}
       disabled={disabled || isLoading}
       className={cn(baseStyles, variants[variant], sizes[size], className)}
       {...props}

@@ -114,6 +114,11 @@ async def lifespan(app: FastAPI):
                     )
                     await conn.execute(
                         text(
+                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS lineage_parent_id VARCHAR"
+                        )
+                    )
+                    await conn.execute(
+                        text(
                             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_runs FLOAT DEFAULT 0"
                         )
                     )

@@ -4,9 +4,9 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  ShoppingCart, Code2, Layers, Activity, 
+  ShoppingCart, Code2, Layers, 
   LayoutGrid, Landmark, ShieldAlert, FileSearch,
-  Cpu, Zap, Menu, X, ChevronRight, Sparkles
+  Zap, Menu, ChevronRight, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -36,24 +36,23 @@ export const Sidebar = () => {
   return (
     <motion.aside 
       initial={false}
-      animate={{ width: isCollapsed ? 88 : 280 }}
-      className="relative z-50 h-screen sticky top-0 hidden md:flex flex-col bg-cyber-background border-r border-white/5 transition-all duration-500 ease-in-out px-4 py-8"
+      animate={{ width: isCollapsed ? 80 : 260 }}
+      className="relative z-50 h-screen sticky top-0 hidden md:flex flex-col bg-background border-r border-white/[0.05] transition-all duration-300 px-4 py-8"
     >
       {/* Brand */}
-      <div className="flex items-center gap-3 px-4 mb-12">
-        <div className="relative w-8 h-8 rounded-lg bg-cyber-cyan shadow-neon-cyan flex items-center justify-center shrink-0">
-          <Zap size={16} className="text-black fill-black" />
-          <div className="absolute -inset-1 bg-cyber-cyan/20 blur-sm rounded-lg -z-10 animate-pulse-slow" />
+      <div className="flex items-center gap-3 px-3 mb-10">
+        <div className="relative w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-xl">
+          <Zap size={18} className="text-black fill-black" />
         </div>
         <AnimatePresence>
           {!isCollapsed && (
             <motion.span 
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              className="text-lg font-black tracking-tighter text-white uppercase italic"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="text-lg font-bold tracking-tight text-white"
             >
-              Shoujiki<span className="text-cyber-cyan">.ai</span>
+              Shoujiki<span className="text-zinc-500">.ai</span>
             </motion.span>
           )}
         </AnimatePresence>
@@ -68,36 +67,29 @@ export const Sidebar = () => {
           return (
             <Link key={item.href} href={item.href}>
               <motion.div
-                whileHover={{ x: 4 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ x: 2 }}
                 className={cn(
-                  "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 relative",
+                  "group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200",
                   isActive 
-                    ? "bg-cyber-cyan/10 text-cyber-cyan" 
-                    : "text-zinc-500 hover:text-zinc-200 hover:bg-white/5"
+                    ? "bg-white/[0.06] text-white shadow-sm" 
+                    : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.03]"
                 )}
               >
-                {isActive && (
-                  <motion.div 
-                    layoutId="active-pill"
-                    className="absolute inset-y-2 left-0 w-1 bg-cyber-cyan rounded-full shadow-neon-cyan"
-                  />
-                )}
-                <Icon size={18} className={cn(isActive ? "text-cyber-cyan" : "group-hover:text-white")} />
+                <Icon size={18} className={cn(isActive ? "text-cyber-cyan" : "group-hover:text-zinc-300")} />
                 <AnimatePresence>
                   {!isCollapsed && (
                     <motion.span 
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      className="text-xs font-bold uppercase tracking-widest whitespace-nowrap"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="text-sm font-medium tracking-tight whitespace-nowrap"
                     >
                       {item.label}
                     </motion.span>
                   )}
                 </AnimatePresence>
                 {!isCollapsed && isActive && (
-                  <ChevronRight size={14} className="ml-auto opacity-50" />
+                  <div className="ml-auto w-1 h-1 rounded-full bg-cyber-cyan shadow-[0_0_8px_rgba(0,243,255,0.5)]" />
                 )}
               </motion.div>
             </Link>
@@ -109,31 +101,31 @@ export const Sidebar = () => {
       <AnimatePresence>
         {!isCollapsed && (
           <motion.div 
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="mt-auto p-4 rounded-2xl bg-white/[0.03] border border-white/5 space-y-4"
+            exit={{ opacity: 0, y: 10 }}
+            className="mt-auto p-5 rounded-2xl bg-white/[0.02] border border-white/[0.05] space-y-4"
           >
-            <div className="flex items-center gap-2 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
               <Sparkles size={12} className="text-cyber-cyan" />
-              Fleet_Telemetrics
+              Telemetrics
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <p className="text-[9px] font-bold text-zinc-600 uppercase">Live_Nodes</p>
-                <p className="text-sm font-mono font-black text-white">{stats.active_agents}</p>
+                <p className="text-[9px] font-bold text-zinc-600 uppercase">Nodes</p>
+                <p className="text-sm font-semibold text-white">{stats.active_agents}</p>
               </div>
               <div className="space-y-1 text-right">
-                <p className="text-[9px] font-bold text-zinc-600 uppercase">Throughput</p>
-                <p className="text-sm font-mono font-black text-cyber-cyan">{stats.total_executions}</p>
+                <p className="text-[9px] font-bold text-zinc-600 uppercase">Tasks</p>
+                <p className="text-sm font-semibold text-cyber-cyan">{stats.total_executions}</p>
               </div>
             </div>
             <div className="h-1 w-full bg-zinc-900 rounded-full overflow-hidden">
               <motion.div 
-                className="h-full bg-cyber-cyan shadow-neon-cyan"
+                className="h-full bg-cyber-cyan shadow-soft-glow"
                 initial={{ width: 0 }}
                 animate={{ width: '65%' }}
-                transition={{ duration: 1.5, ease: "easeOut" }}
+                transition={{ duration: 1, ease: "easeOut" }}
               />
             </div>
           </motion.div>
@@ -143,9 +135,9 @@ export const Sidebar = () => {
       {/* Collapse Toggle */}
       <button 
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-cyber-background border border-white/10 flex items-center justify-center text-zinc-500 hover:text-white hover:border-cyber-cyan transition-all"
+        className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-background border border-white/10 flex items-center justify-center text-zinc-500 hover:text-white hover:border-white/20 transition-all shadow-xl"
       >
-        <Menu size={12} className={cn("transition-transform", isCollapsed && "rotate-180")} />
+        <Menu size={10} className={cn("transition-transform", isCollapsed && "rotate-180")} />
       </button>
     </motion.aside>
   );

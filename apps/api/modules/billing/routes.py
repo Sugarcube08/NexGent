@@ -168,3 +168,54 @@ async def apply_for_agent_loan(
         raise HTTPException(status_code=400, detail=result)
 
     return {"message": "Loan approved and funded", "tx_signature": result}
+
+from pydantic import BaseModel
+
+class BondRequest(BaseModel):
+    amount: float
+    duration_days: int
+
+class YieldRequest(BaseModel):
+    amount: float
+
+@router.post("/agent/{agent_id}/bond")
+async def issue_agent_bond_endpoint(
+    agent_id: str,
+    req: BondRequest,
+    current_user: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Issues a revenue-backed bond for a high-performing agent."""
+    from backend.modules.agents import service as agent_service
+    from backend.modules.billing.yield_protocol import yield_protocol_service
+
+    agent = await agent_service.get_agent(db, agent_id)
+    if not agent or agent.creator_wallet != current_user:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        bond = await yield_protocol_service.issue_agent_bond(db, agent_id, req.amount, req.duration_days)
+        return {"message": "Bond issued successfully", "bond_id": bond.id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/agent/{agent_id}/yield")
+async def deploy_to_yield_protocol(
+    agent_id: str,
+    req: YieldRequest,
+    current_user: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Proposes deploying agent treasury funds to an external DeFi yield protocol."""
+    from backend.modules.agents import service as agent_service
+    from backend.modules.billing.yield_protocol import yield_protocol_service
+
+    agent = await agent_service.get_agent(db, agent_id)
+    if not agent or agent.creator_wallet != current_user:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        result = await yield_protocol_service.deploy_treasury_to_yield(db, agent_id, req.amount)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

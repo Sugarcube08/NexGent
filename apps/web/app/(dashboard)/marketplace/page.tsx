@@ -53,7 +53,11 @@ export default function MarketplacePage() {
             Direct verifiable execution secured by VACN protocols.
           </p>
           <div className="flex items-center gap-4 pt-4">
-            <Button variant="neon" className="px-8 h-12 shadow-xl shadow-cyber-cyan/10">
+            <Button 
+              variant="neon" 
+              className="px-8 h-12 shadow-xl shadow-cyber-cyan/10"
+              onClick={() => document.getElementById('marketplace-search')?.scrollIntoView({ behavior: 'smooth' })}
+            >
               Explore_Top_Performers
             </Button>
             <div className="flex items-center gap-6 px-6 border-l border-white/10">
@@ -75,6 +79,7 @@ export default function MarketplacePage() {
         <div className="flex-1 w-full relative group">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-cyber-cyan transition-colors" />
           <input 
+            id="marketplace-search"
             type="text" 
             placeholder="Filter by agent id, name, or capability..."
             value={search}

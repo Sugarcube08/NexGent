@@ -158,6 +158,35 @@ async def list_tasks(
     ]
 
 
+from pydantic import BaseModel
+
+class MutationRequest(BaseModel):
+    performance_feedback: str
+
+@router.post("/mutate/{agent_id}", response_model=AgentResponse)
+async def mutate_agent_endpoint(
+    agent_id: str,
+    req: MutationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    from backend.modules.agents.mutation import mutation_service
+    
+    agent = await agent_service.get_agent(db, agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.creator_wallet != current_user:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to mutate this agent"
+        )
+        
+    try:
+        mutated_agent = await mutation_service.mutate_agent(db, agent_id, req.performance_feedback)
+        return mutated_agent
+    except Exception as e:
+        logger.error(f"Mutation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Mutation failed: {str(e)}")
+
 @router.post("/deploy", response_model=AgentResponse)
 async def deploy_agent(
     req: AgentCreate,

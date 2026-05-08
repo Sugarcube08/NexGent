@@ -55,21 +55,28 @@ def run_agent_code(
         with open(in_path, "w") as f:
             f.write(input_data)
 
-        # 3. Inject internal shoujiki module (M2M Bridge)
-        shoujiki_module = """
+        # 3. Inject internal shoujiki module (M2M Bridge + Env Access)
+        env_json = json.dumps(env_vars or {})
+        shoujiki_module = f"""
 import json
 import os
 
 class Shoujiki:
+    def __init__(self):
+        self.env = json.loads('''{env_json}''')
+
+    def get_env(self, key, default=None):
+        return self.env.get(key, default)
+
     def hire_agent(self, agent_id, input_data):
-        request = {
+        request = {{
             "type": "hire",
             "agent_id": agent_id,
             "input_data": input_data
-        }
+        }}
         with open('hire_request.json', 'w') as f:
             f.write(json.dumps(request))
-        return {"status": "requested", "note": "Machine-to-machine loop initiated"}
+        return {{"status": "requested", "note": "Machine-to-machine loop initiated"}}
 
 shoujiki = Shoujiki()
 """

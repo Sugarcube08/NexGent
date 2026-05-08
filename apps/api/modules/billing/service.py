@@ -12,16 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import (
     SOLANA_RPC_URL,
     PLATFORM_SECRET_SEED_BYTES,
-    SQUADS_PROGRAM_ID as CONFIG_PROGRAM_ID,
 )
 from backend.db.session import AsyncSessionLocal
 from sqlalchemy.future import select
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Constants
-SQUADS_PROGRAM_ID = Pubkey.from_string(CONFIG_PROGRAM_ID)
 
 # Initialize Platform Keypair
 platform_keypair = Keypair.from_seed(PLATFORM_SECRET_SEED_BYTES)
@@ -157,8 +153,8 @@ async def transfer_sol(recipient_wallet: str, amount_sol: float):
 
 async def withdraw_agent_funds(agent_id: str, requester_wallet: str):
     """
-    Withdraws settled agent earnings from the agent's sovereign treasury (Squads).
-    Triggers a real on-chain withdrawal proposal.
+    Withdraws settled agent earnings.
+    Direct Payout Model: Transfers SOL from the Platform Authority directly to the Creator's Wallet.
     """
     async with AsyncSessionLocal() as db:
         from backend.db.models.models import Agent
@@ -171,27 +167,29 @@ async def withdraw_agent_funds(agent_id: str, requester_wallet: str):
         if agent.creator_wallet != requester_wallet:
             return False, "Unauthorized"
 
-        if not agent.squads_vault_pda:
-            return False, "Agent has no sovereign treasury deployed"
+        amount = agent.balance
+        if amount <= 0:
+            return False, "No earnings to withdraw"
 
-        # Protocol Call: Create real Squads withdrawal proposal
-        from backend.modules.protocols.squads_client import SquadsClient
-
-        squads = SquadsClient()
-
-        # Note: We use the default vault (index 0) for this agent.
-        proposal_id = await squads.create_withdrawal_proposal(
-            agent.squads_vault_pda, requester_wallet, agent.balance
+        logger.info(
+            f"TREASURY: Initializing Direct Payout for agent {agent_id}. Amount: {amount} SOL to {agent.creator_wallet}"
         )
 
-        if proposal_id:
-            # We don't reset balance yet; only after on-chain execution is confirmed.
+        # Protocol Call: Direct SOL transfer from Platform Authority to Creator
+        ok, result = await transfer_sol(agent.creator_wallet, amount)
+
+        if ok:
+            # Update internal ledger: Clear balance
+            agent.balance = 0.0
+            await db.commit()
+            
             logger.info(
-                f"AgentOS: Withdrawal proposal {proposal_id} created for {agent_id}"
+                f"TREASURY: Direct Payout successful for {agent_id}. Tx: {result}"
             )
-            return True, proposal_id
+            return True, result
         else:
-            return False, "Failed to create on-chain proposal"
+            logger.error(f"TREASURY: Direct Payout failed for {agent_id}: {result}")
+            return False, f"Payout failed: {result}"
 
 
 async def withdraw_user_wallet_balance(

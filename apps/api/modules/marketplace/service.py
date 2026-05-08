@@ -166,11 +166,6 @@ async def resolve_dispute(
                     0, agent.successful_runs - 2
                 )  # Strict penalty
 
-                # Recalculate credit profile
-                from backend.modules.billing import credit_service
-
-                await credit_service.update_agent_credit_score(db, agent.id)
-
     await db.commit()
     await db.refresh(dispute)
     logger.info(

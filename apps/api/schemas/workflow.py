@@ -28,10 +28,19 @@ class WorkflowEdge(BaseModel):
     condition: Optional[str] = None  # e.g., "result.score > 0.8" or "SUCCESS"
 
 
+class WorkflowValidationResponse(BaseModel):
+    is_valid: bool
+    errors: List[str] = []
+    estimated_cost_range: Dict[str, float] = {"min": 0.0, "max": 0.0}
+    complexity_score: int = 0
+
+
 class WorkflowBase(BaseModel):
     name: str
     nodes: List[WorkflowNode]
     edges: List[WorkflowEdge]
+    metadata: Optional[Dict[str, Any]] = {}
+    is_simulation_mode: bool = False
 
 
 class WorkflowCreate(WorkflowBase):

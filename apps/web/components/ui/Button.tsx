@@ -19,30 +19,49 @@ export const Button = ({
   children,
   ...props
 }: ButtonProps) => {
-  const baseStyles = 'relative inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/30 disabled:pointer-events-none disabled:opacity-50 gap-2 overflow-hidden';
+  const baseStyles = 'relative inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/30 disabled:pointer-events-none disabled:opacity-50 gap-2 overflow-hidden';
   
   const variants = {
-    primary: 'bg-white text-black hover:bg-zinc-200 active:scale-[0.98]',
-    secondary: 'bg-zinc-900 text-white hover:bg-zinc-800 border border-white/10 active:scale-[0.98]',
-    outline: 'bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:border-white/20 hover:bg-white/[0.03] active:scale-[0.98]',
-    ghost: 'bg-transparent text-zinc-400 hover:text-white hover:bg-white/[0.05] active:scale-[0.98]',
-    neon: 'bg-cyber-cyan/10 text-cyber-cyan border border-cyber-cyan/20 hover:bg-cyber-cyan/20 active:scale-[0.98] shadow-soft-glow',
+    primary: 'bg-white text-black shadow-lg shadow-white/5',
+    secondary: 'bg-zinc-900 text-white border border-white/10 shadow-lg shadow-black/20',
+    outline: 'bg-transparent border border-white/10 text-zinc-400',
+    ghost: 'bg-transparent text-zinc-400',
+    neon: 'bg-cyber-cyan text-black shadow-[0_0_20px_rgba(0,243,255,0.3)]',
   };
 
   const sizes = {
-    sm: 'h-9 px-4 text-xs',
-    md: 'h-11 px-6 text-sm',
-    lg: 'h-14 px-10 text-base',
+    sm: 'h-9 px-4 text-[10px] tracking-wider uppercase font-black',
+    md: 'h-11 px-6 text-xs tracking-wider uppercase font-black',
+    lg: 'h-14 px-10 text-sm tracking-widest uppercase font-black',
     icon: 'h-11 w-11 p-0',
   };
 
   return (
     <motion.button
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ 
+        scale: 1.02,
+        y: -1,
+        transition: { type: "spring", stiffness: 400, damping: 10 }
+      }}
+      whileTap={{ scale: 0.97 }}
       disabled={disabled || isLoading}
       className={cn(baseStyles, variants[variant], sizes[size], className)}
       {...props}
     >
+      {/* Background Hover Glow for Primary/Neon */}
+      {(variant === 'primary' || variant === 'neon') && (
+        <motion.div 
+          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full"
+          animate={{ x: ['100%', '-100%'] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+        />
+      )}
+      
+      {/* Subtle Overlay on hover */}
+      <motion.div 
+        className="absolute inset-0 bg-current opacity-0 hover:opacity-[0.08] transition-opacity duration-300"
+      />
+
       {isLoading ? <Loader2 className="h-4 w-4 animate-spin text-current" /> : null}
       <span className="relative z-10 flex items-center gap-2">
         {children}

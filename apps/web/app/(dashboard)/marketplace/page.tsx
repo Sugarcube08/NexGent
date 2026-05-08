@@ -88,11 +88,19 @@ export default function MarketplacePage() {
           />
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <Button variant="outline" className="h-14 px-6 rounded-2xl gap-3 flex-1 md:flex-none">
+          <Button 
+            variant="outline" 
+            className="h-14 px-6 rounded-2xl gap-3 flex-1 md:flex-none"
+            onClick={() => alert("Category filtering is coming in the next protocol update.")}
+          >
             <Filter size={16} />
             Categories
           </Button>
-          <Button variant="outline" className="h-14 px-6 rounded-2xl gap-3 flex-1 md:flex-none text-zinc-500">
+          <Button 
+            variant="outline" 
+            className="h-14 px-6 rounded-2xl gap-3 flex-1 md:flex-none text-zinc-500"
+            onClick={() => alert("Advanced sorting is coming in the next protocol update.")}
+          >
             <SlidersHorizontal size={16} />
             Sort
           </Button>

@@ -60,10 +60,13 @@ import json
 class Agent:
     def run(self, input_data):
         # Neural logic here
+        text = input_data.get("text", "Protocol")
+        
+        # We return a transformed result in the 'data' key
+        # This ensures compatibility with Swarm OS orchestrators
         return {
             "status": "success",
-            "message": "Protocol sequence initiated",
-            "data": input_data
+            "data": f"Handshake_Success: '{text}' has been validated by Node-Alpha-1"
         }
 
 agent = Agent()`,
@@ -75,6 +78,7 @@ agent = Agent()`,
   const [newDep, setNewDep] = useState('');
   const [entrypoint, setEntrypoint] = useState('main.py');
 
+  const [testInput, setTestInput] = useState('{"text": "Hello Shoujiki"}');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
   const [error, setError] = useState('');
@@ -100,6 +104,13 @@ agent = Agent()`,
     setError('');
     setTestResult(null);
     try {
+      let parsedInput = {};
+      try {
+        parsedInput = JSON.parse(testInput);
+      } catch (e) {
+        throw new Error("Invalid JSON in Test Input");
+      }
+
       const res = await testAgent({
         ...metadata,
         id: metadata.id || 'test-agent',
@@ -107,13 +118,14 @@ agent = Agent()`,
         files,
         requirements,
         entrypoint,
+        input_data: parsedInput,
         env_vars: getEnvVarsDict(),
         version: 'v' + Date.now()
       });
       setTestResult(res);
       if (res.result) setSuccessMsg('Protocol verification pass.');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Simulation aborted');
+      setError(err.message || err.response?.data?.detail || 'Simulation aborted');
     } finally {
       setTesting(false);
     }
@@ -281,6 +293,22 @@ agent = Agent()`,
                   </button>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+
+          {/* Test Input Panel */}
+          <Card className="border-zinc-800/40 bg-[#09090b]">
+            <CardHeader className="py-4 px-6 border-b border-zinc-800/40 bg-zinc-900/10">
+              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Test_Input (JSON)</span>
+            </CardHeader>
+            <CardContent className="p-4">
+              <textarea 
+                className="w-full h-32 bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-[11px] font-mono text-zinc-400 outline-none focus:border-zinc-700 transition-all resize-none"
+                value={testInput}
+                onChange={(e) => setTestInput(e.target.value)}
+                placeholder='{"key": "value"}'
+              />
+              <p className="text-[9px] text-zinc-600 mt-2 italic px-1">This payload is sent to the agent during Run Bench.</p>
             </CardContent>
           </Card>
         </div>

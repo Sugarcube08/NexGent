@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict
 from datetime import datetime
 
 
@@ -19,9 +19,13 @@ class TaskResponse(BaseModel):
 class TaskHistoryResponse(BaseModel):
     id: str
     agent_id: str
+    user_wallet: str
     status: str
+    input_data: Optional[str] = None
     result: Optional[str] = None
-    execution_receipt: Optional[dict] = None
+    input_tokens: float = 0
+    output_tokens: float = 0
+    poae_hash: Optional[str] = None
     created_at: datetime
 
     class Config:

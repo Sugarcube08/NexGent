@@ -12,11 +12,6 @@ class UserWallet(Base):
     # Allowance Configuration: { agent_id: limit_amount }
     allowances = Column(JSON, nullable=False, default={})
 
-    # Auto Top-Up Configuration
-    auto_topup_enabled = Column(Boolean, default=False)
-    auto_topup_threshold = Column(Float, default=1.0)  # SOL
-    auto_topup_amount = Column(Float, default=2.0)  # SOL
-
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -37,9 +32,6 @@ class Agent(Base):
     price_per_million_output_tokens = Column(Float, nullable=False, default=0.05)
 
     creator_wallet = Column(String, nullable=False, index=True)
-    mint_address = Column(
-        String, nullable=True, index=True
-    )  # Metaplex Core Asset Address
     env_vars = Column(JSON, nullable=True, default={})
 
     # Execution Stats
@@ -50,16 +42,10 @@ class Agent(Base):
     balance = Column(Float, nullable=False, default=0.0)
     total_earnings = Column(Float, nullable=False, default=0.0)
 
-    # Protocol Integration Fields (AgentOS Level-Up)
-    squads_vault_pda = Column(
-        String, nullable=True
-    )  # Squads V4: Agent's sovereign treasury
-    credential_registry_address = Column(
-        String, nullable=True
-    )  # W3C Attestations / On-chain Identity Graph
+    # Lineage tracking
     lineage_parent_id = Column(
         String, ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
-    )  # Genetic mutation lineage
+    )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -83,25 +69,11 @@ class Task(Base):
     input_tokens = Column(Float, default=0)
     output_tokens = Column(Float, default=0)
 
-    # Protocol Fields
-    settlement_signature = Column(String, nullable=True)
-    execution_receipt = Column(JSON, nullable=True)
-    poae_hash = Column(String, nullable=True)  # Proof of Autonomous Execution (VACN)
+    # Practical Verifiable Receipt
+    poae_hash = Column(String, nullable=True)  # Verifiable Execution Receipt Manifest Hash
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class Payment(Base):
-    __tablename__ = "payments"
-
-    task_id = Column(
-        String, ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True
-    )
-    tx_signature = Column(String, unique=True, nullable=False)
-    amount = Column(Float, nullable=False)
-    status = Column(String, default="locked")  # locked, released
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class Workflow(Base):
@@ -129,12 +101,12 @@ class WorkflowRun(Base):
     status = Column(String, default="queued")  # queued, running, completed, failed
 
     # Agentic Budgeting
-    max_budget = Column(Float, default=0.0)  # atMax budget for the entire swarm
-    total_spend = Column(Float, default=0.0)  # Cumulative SOL spent
+    max_budget = Column(Float, default=0.0)
+    total_spend = Column(Float, default=0.0)
 
     # Node-Connector Tracking
-    active_nodes = Column(JSON, nullable=True, default=[]) # Current frontier in the graph
-    completed_steps = Column(JSON, nullable=True, default={}) # {node_id: {status, result, cost}}
+    active_nodes = Column(JSON, nullable=True, default=[])
+    completed_steps = Column(JSON, nullable=True, default={})
     results = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -191,55 +163,6 @@ class Dispute(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
-class AgentCredit(Base):
-    __tablename__ = "agent_credits"
-
-    agent_id = Column(
-        String, ForeignKey("agents.id", ondelete="CASCADE"), primary_key=True
-    )
-    credit_score = Column(
-        Float, default=500.0
-    )  # 300 - 850 range (FICO-like for agents)
-    credit_limit = Column(Float, default=0.0)  # Max SOL borrowable
-    utilization = Column(Float, default=0.0)
-    repayment_history = Column(JSON, default=[])  # List of repayments
-
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-
-class AgentLoan(Base):
-    __tablename__ = "agent_loans"
-
-    id = Column(String, primary_key=True, index=True)
-    agent_id = Column(
-        String, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
-    )
-    lender_wallet = Column(String, nullable=False)  # Can be protocol or another agent
-    principal = Column(Float, nullable=False)
-    interest_rate = Column(Float, nullable=False)  # Annualized %
-    term_days = Column(Float, nullable=False)
-    balance_remaining = Column(Float, nullable=False)
-    status = Column(String, default="active")  # active, repaid, defaulted
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    due_at = Column(DateTime(timezone=True), nullable=False)
-
-
-class AgentBond(Base):
-    __tablename__ = "agent_bonds"
-
-    id = Column(String, primary_key=True, index=True)
-    agent_id = Column(
-        String, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False
-    )
-    amount = Column(Float, nullable=False)
-    purpose = Column(String, nullable=False)  # e.g., "high_value_task_guarantee"
-    status = Column(String, default="locked")  # locked, released, slashed
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    locked_until = Column(DateTime(timezone=True), nullable=True)
-
-
 class ProtocolProposal(Base):
     __tablename__ = "protocol_proposals"
 
@@ -247,8 +170,8 @@ class ProtocolProposal(Base):
     proposer_wallet = Column(String, nullable=False)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    parameter_change = Column(JSON, nullable=True)  # e.g., {"fee_ratio": 0.05}
-    status = Column(String, default="active")  # active, passed, defeated, executed
+    parameter_change = Column(JSON, nullable=True)
+    status = Column(String, default="active")
 
     votes_for = Column(Float, default=0.0)
     votes_against = Column(Float, default=0.0)
@@ -264,7 +187,7 @@ class ExecutorStake(Base):
     wallet_address = Column(String, nullable=False, index=True)
     amount_staked = Column(Float, nullable=False)
     reputation_score = Column(Float, default=100.0)
-    status = Column(String, default="active")  # active, jailed, slashed
+    status = Column(String, default="active")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { getMyAgents, deleteAgent } from '@/lib/api';
+import { getMyAgents, deleteAgent, getTasks } from '@/lib/api';
 import { AgentCard } from '@/components/agent/AgentCard';
 import { Loader2, LayoutGrid, Shield, Activity, Sparkles, Cpu, Wallet, Rocket } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -9,21 +9,26 @@ import { useRouter } from 'next/navigation';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
 import { Alert } from '@/components/ui/Alert';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { cn, safeJsonParse } from '@/lib/utils';
 
 export default function MyAgentsPage() {
   const router = useRouter();
   const { connected, login } = useWalletAuth();
   
   const [agents, setAgents] = useState<any[]>([]);
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const fetchAgents = async () => {
+  const fetchData = async () => {
     try {
-      const data = await getMyAgents();
-      setAgents(data);
+      const [agentData, tasksData] = await Promise.all([
+        getMyAgents(),
+        getTasks()
+      ]);
+      setAgents(agentData);
+      setRecentTasks(tasksData.slice(0, 10));
     } catch (err) {
       console.error(err);
     } finally {
@@ -32,7 +37,7 @@ export default function MyAgentsPage() {
   };
 
   useEffect(() => {
-    if (connected) fetchAgents();
+    if (connected) fetchData();
     else setLoading(false);
   }, [connected]);
 
@@ -130,6 +135,77 @@ export default function MyAgentsPage() {
           <Button variant="primary" onClick={() => router.push('/dev')} className="h-14 px-12 rounded-2xl shadow-2xl">Initialize Provisioning</Button>
         </div>
       )}
+
+      {/* Recent Fleet Activity Section */}
+      <div className="pt-20 space-y-10">
+        <div className="flex items-center justify-between px-2">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-bold text-white tracking-tight">Fleet Activity</h2>
+            <p className="text-zinc-500 text-sm font-medium">Real-time audit of recent autonomous executions across your fleet.</p>
+          </div>
+          <Button 
+            variant="outline" 
+            onClick={() => router.push('/executions')}
+            className="h-10 border-white/[0.06] text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-white/[0.02]"
+          >
+            Open Execution_Log
+          </Button>
+        </div>
+
+        <div className="bg-[#0c0c0e] border border-white/[0.06] rounded-[32px] overflow-hidden shadow-2xl">
+           <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-white/[0.02] border-b border-white/[0.06]">
+                   <th className="px-8 py-5 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Execution_ID</th>
+                   <th className="px-8 py-5 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Agent_Node</th>
+                   <th className="px-8 py-5 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Status</th>
+                   <th className="px-8 py-5 text-[10px] font-black text-zinc-500 uppercase tracking-widest">Result_Preview</th>
+                   <th className="px-8 py-5 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-right">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.04]">
+                 {recentTasks.length > 0 ? recentTasks.map((task) => (
+                    <tr key={task.id} className="hover:bg-white/[0.01] transition-colors group cursor-pointer" onClick={() => router.push(`/agent/${task.agent_id}`)}>
+                       <td className="px-8 py-5 font-mono text-[11px] text-zinc-400 group-hover:text-cyber-cyan transition-colors">{task.id.slice(0, 12)}...</td>
+                       <td className="px-8 py-5 text-[11px] font-bold text-zinc-300">{task.agent_id}</td>
+                       <td className="px-8 py-5">
+                          <div className={cn(
+                             "inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider",
+                             task.status === 'completed' || task.status === 'settled' ? "bg-green-500/10 text-green-500 border border-green-500/20" :
+                             task.status === 'failed' ? "bg-red-500/10 text-red-500 border border-red-500/20" : 
+                             "bg-zinc-500/10 text-zinc-500 border border-zinc-800"
+                          )}>
+                             <div className={cn("w-1 h-1 rounded-full", 
+                               task.status === 'completed' || task.status === 'settled' ? "bg-green-500" :
+                               task.status === 'failed' ? "bg-red-500" : "bg-zinc-500"
+                             )} />
+                             {task.status}
+                          </div>
+                       </td>
+                       <td className="px-8 py-5">
+                          <p className="text-[11px] font-mono text-zinc-500 truncate max-w-[200px]">
+                             {task.result ? (
+                               typeof safeJsonParse(task.result) === 'object' 
+                                 ? JSON.stringify(safeJsonParse(task.result))
+                                 : task.result
+                             ) : "..."}
+                          </p>
+                       </td>
+                       <td className="px-8 py-5 text-right text-[10px] font-mono text-zinc-600">
+                          {new Date(task.created_at).toLocaleTimeString()}
+                       </td>
+                    </tr>
+                 )) : (
+                    <tr>
+                       <td colSpan={5} className="px-8 py-20 text-center text-[10px] font-bold text-zinc-600 uppercase tracking-widest">
+                          No autonomous activity recorded in this session.
+                       </td>
+                    </tr>
+                 )}
+              </tbody>
+           </table>
+        </div>
+      </div>
 
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
       {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}

@@ -38,8 +38,13 @@ export function useWalletAuth() {
   useEffect(() => {
     if (connected && publicKey) {
       const fetchBalance = async () => {
-        const bal = await connection.getBalance(publicKey);
-        setBalance(bal / LAMPORTS_PER_SOL);
+        try {
+          const bal = await connection.getBalance(publicKey);
+          setBalance(bal / LAMPORTS_PER_SOL);
+        } catch (err) {
+          console.error("Failed to fetch Solana balance:", err);
+          setBalance(null);
+        }
       };
       fetchBalance();
       const id = connection.onAccountChange(publicKey, (info) => {

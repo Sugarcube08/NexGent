@@ -131,7 +131,11 @@ export default function LaborExchangePage() {
         </div>
 
         <div className="flex gap-3">
-           <Button variant="outline" className="border-zinc-800 rounded-xl h-11 px-6 text-xs font-bold uppercase tracking-widest gap-2">
+           <Button 
+              variant="outline" 
+              className="border-zinc-800 rounded-xl h-11 px-6 text-xs font-bold uppercase tracking-widest gap-2"
+              onClick={() => setSuccess("Advanced market filters coming in Phase 3.")}
+           >
               <Filter size={16} /> Filter
            </Button>
         </div>
@@ -236,11 +240,11 @@ export default function LaborExchangePage() {
                    onChange={e => setNewOrder({...newOrder, budget: e.target.value})}
                  />
                  <Button className="w-full h-12 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg" 
-                    onClick={handleCreateOrder} 
+                    onClick={!isAuthenticated ? login : handleCreateOrder} 
                     isLoading={isCreating}
-                    disabled={!connected}
+                    disabled={isCreating}
                  >
-                    Broadcast to Network
+                    {!connected ? 'Connect Wallet' : !isAuthenticated ? 'Authorize Session' : 'Broadcast to Network'}
                  </Button>
               </CardContent>
            </Card>

@@ -4,12 +4,12 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# Load environment variables before any other imports that might use them
+# Load environment variables
 load_dotenv()
 
 from backend.db.session import engine, Base, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, select
+from sqlalchemy import select
 from backend.modules.auth.routes import router as auth_router
 from backend.modules.agents.routes import router as agents_router
 from backend.modules.billing.routes import router as billing_router
@@ -37,16 +37,6 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Verify environment
-    from backend.core.security import SECRET_KEY
-
-    if SECRET_KEY == "shoujiki-secret-key-change-in-production":
-        logger.warning(
-            "SECRET_KEY is using the default value. Token validation may fail if .env is not loaded."
-        )
-    else:
-        logger.info("SECRET_KEY loaded from environment.")
-
     # Initialize Redis connections
     app.state.redis_queue = await create_pool(
         RedisSettings(
@@ -58,139 +48,22 @@ async def lifespan(app: FastAPI):
             host=REDIS_PUBSUB_HOST, port=REDIS_PUBSUB_PORT, password=REDIS_PASSWORD
         )
     )
-    logger.info("Redis connections initialized: Queue and PubSub isolated.")
+    logger.info("Redis connections initialized.")
 
-    # Startup: Create tables with retries (Wait for DB to awaken)
-    max_retries = 10
-    retry_delay = 3
+    # Startup: Ensure tables exist
+    max_retries = 5
     for i in range(max_retries):
         try:
             async with engine.begin() as conn:
-                # 1. Ensure tables exist
                 await conn.run_sync(Base.metadata.create_all)
-
-                # 2. Manual Migration: Add protocol columns if they don't exist
-                try:
-                    # Agent Table Protocol Fields
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS squads_vault_pda VARCHAR"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS credential_registry_address VARCHAR"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_runs FLOAT DEFAULT 0"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS successful_runs FLOAT DEFAULT 0"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS balance FLOAT DEFAULT 0"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_earnings FLOAT DEFAULT 0"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS price_per_million_input_tokens FLOAT DEFAULT 0.01"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS price_per_million_output_tokens FLOAT DEFAULT 0.05"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS lineage_parent_id VARCHAR"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_runs FLOAT DEFAULT 0"
-                        )
-                    )
-                    ...
-                    # Task Table Protocol Fields
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS input_tokens FLOAT DEFAULT 0"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS output_tokens FLOAT DEFAULT 0"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS poae_hash VARCHAR"
-                        )
-                    )
-
-
-                    # Workflow Table Node Connector Migration
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS nodes JSON DEFAULT '[]'"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE workflows ADD COLUMN IF NOT EXISTS edges JSON DEFAULT '[]'"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE workflows DROP COLUMN IF EXISTS steps"
-                        )
-                    )
-
-                    # WorkflowRun Table Node Connector Migration
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS active_nodes JSON DEFAULT '[]'"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS max_budget FLOAT DEFAULT 0"
-                        )
-                    )
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE workflow_runs ADD COLUMN IF NOT EXISTS total_spend FLOAT DEFAULT 0"
-                        )
-                    )
-                except Exception as migrate_err:
-                    logger.warning(f"Manual migration notice: {migrate_err}")
-
-            logger.info("Database connection established and tables verified.")
+            logger.info("Database verified.")
             break
         except Exception as e:
             if i < max_retries - 1:
-                logger.warning(
-                    f"Database not ready yet (Attempt {i + 1}/{max_retries}). Retrying in {retry_delay}s... Error: {e}"
-                )
-                await asyncio.sleep(retry_delay)
+                await asyncio.sleep(2)
             else:
-                logger.error(
-                    f"Critical: Could not connect to database after {max_retries} attempts. API may fail."
-                )
+                logger.error(f"DB Connection failed: {e}")
     yield
-    # Shutdown: Clean up resources if needed
     await engine.dispose()
     logger.info("Database connection closed")
 
@@ -228,54 +101,38 @@ app.include_router(protocol_router, prefix="/protocol", tags=["protocol"])
 @app.websocket("/ws/telemetry")
 async def websocket_telemetry(websocket: WebSocket):
     await websocket.accept()
-    logger.info("WebSocket: Global Telemetry Client connected")
-
     redis = app.state.redis_pubsub
     pubsub = redis.pubsub()
-    # Subscribe to all task and workflow events globally
     await pubsub.psubscribe("task:*", "workflow:*", "telemetry:*")
-
     try:
         async for message in pubsub.listen():
             if message["type"] == "pmessage":
                 channel = message["channel"].decode("utf-8")
                 data = message["data"].decode("utf-8")
-                # We wrap the raw data with the channel context
                 payload = {"channel": channel, "data": json.loads(data) if data.startswith("{") else data}
                 await websocket.send_text(json.dumps(payload))
     except WebSocketDisconnect:
-        logger.info("WebSocket: Telemetry Client disconnected")
-    except asyncio.CancelledError:
         pass
-    except Exception as e:
-        logger.error(f"Telemetry WS error: {e}")
     finally:
-        await pubsub.punsubscribe("task:*", "workflow:*", "telemetry:*")
         await pubsub.close()
 
 @app.websocket("/ws/tasks/{task_id}")
 async def websocket_endpoint(websocket: WebSocket, task_id: str):
     await websocket.accept()
-    logger.info(f"WebSocket: Client connected for task {task_id}")
-
     redis = app.state.redis_pubsub
     pubsub = redis.pubsub()
     await pubsub.subscribe(f"task:{task_id}")
-
     try:
         async for message in pubsub.listen():
             if message["type"] == "message":
                 data = message["data"].decode("utf-8")
                 await websocket.send_text(data)
-
-                # If task is finished, we can close the connection
                 msg_json = json.loads(data)
-                if msg_json.get("status") in ["completed", "failed"]:
+                if msg_json.get("status") in ["completed", "failed", "settled"]:
                     break
     except WebSocketDisconnect:
-        logger.info(f"WebSocket: Client disconnected for task {task_id}")
+        pass
     finally:
-        await pubsub.unsubscribe(f"task:{task_id}")
         await pubsub.close()
 
 
@@ -287,7 +144,6 @@ async def health_check():
 @app.get("/config")
 async def get_config():
     from backend.modules.billing.service import PLATFORM_WALLET
-
     return {"platform_wallet": PLATFORM_WALLET}
 
 
@@ -298,9 +154,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
     agent_count = await db.execute(select(func.count(Agent.id)))
     task_count = await db.execute(select(func.count(Task.id)))
-    volume_res = await db.execute(
-        select(func.sum(Agent.total_earnings))
-    )
+    volume_res = await db.execute(select(func.sum(Agent.total_earnings)))
 
     return {
         "active_agents": agent_count.scalar() or 0,
@@ -311,4 +165,4 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to Shoujiki API", "version": "1.0.0", "docs": "/docs"}
+    return {"message": "Welcome to Shoujiki API", "version": "1.0.0"}

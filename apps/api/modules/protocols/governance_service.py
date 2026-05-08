@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 NETWORK_PARAMETERS = {
     "min_executor_stake": 10.0,  # SOL
     "challenge_window_seconds": 300,
-    "fee_ratio": 0.02,  # 2% protocol fee
+    "fee_ratio": 0.05,  # 5% protocol fee
     "slashing_penalty": 0.5,  # 50% of stake slashed on fraud
 }
 

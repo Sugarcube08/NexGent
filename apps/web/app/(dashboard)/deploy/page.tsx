@@ -16,15 +16,14 @@ import {
   Cpu
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
-import { cn } from '@/lib/utils';
 
 
 export default function DeploySpacePage() {
   const router = useRouter();
-  const { isAuthenticated, connected, login } = useWalletAuth();
+  const { isAuthenticated, connected } = useWalletAuth();
 
   const [draft, setDraft] = useState<any>(null);
-  const [status, setStatus] = useState<'idle' | 'validating' | 'minting' | 'done'>('idle');
+  const [status, setStatus] = useState<'idle' | 'deploying' | 'done'>('idle');
   const [error, setError] = useState('');
   const [deployedAgent, setDeployedAgent] = useState<any>(null);
 
@@ -43,18 +42,13 @@ export default function DeploySpacePage() {
     if (!draft || !isAuthenticated) return;
 
     setError('');
-    setStatus('validating');
+    setStatus('deploying');
 
     try {
       const res = await deployAgent(draft);
-      setStatus('minting');
       setDeployedAgent(res);
       localStorage.removeItem('shoujiki_draft');
-
-      setTimeout(() => {
-        setStatus('done');
-      }, 2000);
-
+      setStatus('done');
     } catch (err: any) {
       console.error(err);
       setError(err.response?.data?.detail || err.message || 'Deployment failed');
@@ -78,14 +72,11 @@ export default function DeploySpacePage() {
         >
           <ArrowLeft size={14} /> Back to Editor
         </button>
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-          Registry Ready
-        </div>
       </div>
 
       <div className="space-y-2 border-b border-zinc-900 pb-10">
         <h1 className="text-3xl font-semibold text-white tracking-tight">Deployment Pipeline</h1>
-        <p className="text-zinc-400 text-sm font-medium">Review specifications and initialize on-chain protocol sequence.</p>
+        <p className="text-zinc-400 text-sm font-medium">Initialize your autonomous agent on the verifiable network.</p>
       </div>
 
       {status === 'done' ? (
@@ -95,15 +86,15 @@ export default function DeploySpacePage() {
               <CheckCircle2 size={32} className="text-green-500" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-white">Sovereign Node Deployed</h2>
-              <p className="text-zinc-500 text-sm">Your autonomous protocol node is now active.</p>
+              <h2 className="text-2xl font-bold text-white">Agent Deployed</h2>
+              <p className="text-zinc-500 text-sm">Your autonomous node is now active and ready for work.</p>
             </div>
 
             <div className="w-full max-w-lg p-5 bg-zinc-950 border border-zinc-800 rounded-xl space-y-4">
               <div className="space-y-1 text-left">
-                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest block mb-2">Passport_Asset (Metaplex)</span>
+                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest block mb-2">Protocol_ID</span>
                 <p className="text-xs font-mono text-zinc-400 break-all bg-zinc-900 p-3 rounded-lg border border-zinc-800">
-                  {deployedAgent?.mint_address || 'Confirmed on Devnet'}
+                  {deployedAgent?.id}
                 </p>
               </div>
             </div>
@@ -148,20 +139,6 @@ export default function DeploySpacePage() {
                     <p className="text-lg font-semibold text-zinc-200">{draft.env_vars ? Object.keys(draft.env_vars).length : 0}</p>
                   </div>
                 </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
-                    <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Entrypoint</span>
-                    <span className="text-[10px] font-mono text-blue-500 font-bold">{draft.entrypoint}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.keys(draft.files).map(f => (
-                      <span key={f} className="text-[9px] font-bold uppercase bg-zinc-900 border border-zinc-800 text-zinc-500 px-2 py-1 rounded">
-                        {f}
-                      </span>
-                    ))}
-                  </div>
-                </div>
               </CardContent>
             </Card>
           </div>
@@ -169,28 +146,13 @@ export default function DeploySpacePage() {
           <div className="lg:col-span-7 space-y-8 text-left">
             <Card className="border-zinc-800 bg-[#09090b]">
               <CardHeader className="border-b border-zinc-900">
-                <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-widest">System Check</h3>
+                <h3 className="text-sm font-bold text-zinc-200 uppercase tracking-widest">Launch Sequence</h3>
               </CardHeader>
               <CardContent className="p-8 space-y-10">
-                <div className="space-y-8">
-                  {[
-                    { label: "Protocol Integrity", desc: "Verifying multi-file logic and WASM runtime safety.", active: status === 'validating', done: status === 'minting' },
-                    { label: "Protocol Registration", desc: "Registering agent node on the network.", active: status === 'minting', done: false },
-                    { label: "Metaplex Passport", desc: "Minting on-chain identity asset (Passport).", active: false, done: false }
-                  ].map((step, i) => (
-                    <div key={i} className="flex gap-6">
-                      <div className={cn(
-                        "w-10 h-10 rounded-xl flex items-center justify-center border-2 border-zinc-900 shrink-0 transition-all",
-                        step.active ? "bg-blue-600 border-blue-400/20" : step.done ? "bg-green-600 border-green-400/20" : "bg-zinc-900 border-zinc-800"
-                      )}>
-                        {step.active ? <Loader2 size={16} className="animate-spin text-white" /> : <CheckCircle2 size={16} className={step.done ? "text-white" : "text-zinc-700"} />}
-                      </div>
-                      <div className="space-y-1">
-                        <p className={cn("text-sm font-bold uppercase tracking-wide", step.active || step.done ? "text-white" : "text-zinc-600")}>{i + 1}. {step.label}</p>
-                        <p className="text-xs text-zinc-500 font-medium leading-relaxed">{step.desc}</p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="space-y-4">
+                    <p className="text-sm text-zinc-400 leading-relaxed">
+                        Initializing the agent on the verifiable network. This will register your agent in the global registry and enable it to accept tasks.
+                    </p>
                 </div>
 
                 <div className="pt-8 border-t border-zinc-900">
@@ -201,7 +163,7 @@ export default function DeploySpacePage() {
                     isLoading={status !== 'idle'}
                   >
                     <Rocket size={18} />
-                    Initialize Launch Sequence
+                    Deploy to Registry
                   </Button>
                 </div>
               </CardContent>

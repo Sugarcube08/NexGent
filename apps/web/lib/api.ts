@@ -82,34 +82,8 @@ export const runAgent = async (
   return response.data;
 };
 
-export const getTaskStatus = async (taskId: string) => {
-  const response = await api.get(`/agents/tasks`);
-  const tasks = response.data;
-  return tasks.find((t: any) => t.id === taskId);
-};
-
 export const getMyAppWallet = async () => {
   const response = await api.get('/billing/wallet/me');
-  return response.data;
-};
-
-export const getAgentCredit = async (agentId: string) => {
-  const response = await api.get(`/billing/agent/${agentId}/credit`);
-  return response.data;
-};
-
-export const refreshCreditScore = async (agentId: string) => {
-  const response = await api.post(`/billing/agent/${agentId}/credit/refresh`);
-  return response.data;
-};
-
-export const requestAgentLoan = async (agentId: string, amount: number) => {
-  const response = await api.post(`/billing/agent/${agentId}/loans`, { amount });
-  return response.data;
-};
-
-export const getAgentLoans = async (agentId: string) => {
-  const response = await api.get(`/billing/agent/${agentId}/loans`);
   return response.data;
 };
 
@@ -148,8 +122,11 @@ export const acceptBid = async (orderId: string, bidId: string) => {
   return response.data;
 };
 
-export const getTasks = async (status?: string) => {
-  const response = await api.get(`/agents/tasks${status ? `?status=${status}` : ''}`);
+export const getTasks = async (status?: string, agentId?: string) => {
+  let url = `/agents/tasks/me?`;
+  if (status) url += `status=${status}&`;
+  if (agentId) url += `agent_id=${agentId}`;
+  const response = await api.get(url);
   return response.data;
 };
 
@@ -160,6 +137,11 @@ export const getWorkflows = async () => {
 
 export const createWorkflow = async (workflowData: any) => {
   const response = await api.post('/workflows', workflowData);
+  return response.data;
+};
+
+export const validateWorkflow = async (workflowData: any) => {
+  const response = await api.post('/workflows/validate', workflowData);
   return response.data;
 };
 
@@ -191,21 +173,6 @@ export const resolveDispute = async (id: string, resolution: string, details: st
 
 export const withdrawAgentBalance = async (id: string) => {
   const response = await api.post(`/billing/agent/${id}/withdraw`, {});
-  return response.data;
-};
-
-export const mutateAgent = async (id: string, performanceFeedback: string) => {
-  const response = await api.post(`/agents/mutate/${id}`, { performance_feedback: performanceFeedback });
-  return response.data;
-};
-
-export const issueAgentBond = async (id: string, amount: number, durationDays: number) => {
-  const response = await api.post(`/billing/agent/${id}/bond`, { amount, duration_days: durationDays });
-  return response.data;
-};
-
-export const deployToYield = async (id: string, amount: number) => {
-  const response = await api.post(`/billing/agent/${id}/yield`, { amount });
   return response.data;
 };
 

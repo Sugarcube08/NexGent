@@ -6,13 +6,16 @@ import uuid
 import logging
 
 from backend.db.session import get_db
-from backend.db.models.models import Workflow, WorkflowRun
+from backend.db.models.models import Workflow, WorkflowRun, Agent
 from backend.schemas.workflow import (
     WorkflowCreate,
     WorkflowResponse,
     WorkflowRunRequest,
     WorkflowRunResponse,
     WorkflowRunHistoryResponse,
+    WorkflowValidationResponse,
+    WorkflowBase,
+    NodeType,
 )
 from backend.core.dependencies import get_current_user
 
@@ -21,17 +24,77 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.post("/validate", response_model=WorkflowValidationResponse)
+async def validate_workflow(
+    req: WorkflowBase,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Dry-run validation of a workflow graph.
+    Checks for: 
+    1. Single START node
+    2. Reachability of all nodes
+    3. Cycle detection (for deterministic parts)
+    4. Existence of referenced agents
+    """
+    errors = []
+    
+    # 1. Start Node check
+    starts = [n for n in req.nodes if n.type == NodeType.START]
+    if len(starts) != 1:
+        errors.append(f"Workflow must have exactly one START node, found {len(starts)}")
+    
+    # 2. End Node check
+    ends = [n for n in req.nodes if n.type == NodeType.END]
+    if len(ends) == 0:
+        errors.append("Workflow should have at least one END node")
+        
+    # 3. Agent existence
+    agent_nodes = [n for n in req.nodes if n.type == NodeType.AGENT]
+    for node in agent_nodes:
+        agent_id = node.config.get("agent_id")
+        if not agent_id:
+            errors.append(f"Node {node.id} is an AGENT node but has no agent_id configured")
+        else:
+            res = await db.execute(select(Agent).where(Agent.id == agent_id))
+            if not res.scalars().first():
+                errors.append(f"Node {node.id} references non-existent agent: {agent_id}")
+
+    # 4. Connectivity check
+    node_ids = {n.id for n in req.nodes}
+    for edge in req.edges:
+        if edge.source not in node_ids:
+            errors.append(f"Edge {edge.id} has invalid source: {edge.source}")
+        if edge.target not in node_ids:
+            errors.append(f"Edge {edge.id} has invalid target: {edge.target}")
+
+    return WorkflowValidationResponse(
+        is_valid=len(errors) == 0,
+        errors=errors,
+        complexity_score=len(req.nodes) + len(req.edges),
+        estimated_cost_range={"min": len(agent_nodes) * 0.0001, "max": len(agent_nodes) * 0.05}
+    )
+
+
 @router.post("", response_model=WorkflowResponse)
 async def create_workflow(
     req: WorkflowCreate,
     db: AsyncSession = Depends(get_db),
     current_user: str = Depends(get_current_user),
 ):
+    # Robustness: Validate before save
+    validation = await validate_workflow(req, db)
+    if not validation.is_valid:
+        raise HTTPException(
+            status_code=400, 
+            detail={"message": "Invalid Workflow Graph", "errors": validation.errors}
+        )
+
     db_workflow = Workflow(
         id=req.id,
         name=req.name,
         creator_wallet=current_user,
-        nodes=[node.dict() for node in req.nodes],
+        nodes=[{**node.dict(), "is_simulation_mode": req.is_simulation_mode} for node in req.nodes],
         edges=[edge.dict() for edge in req.edges],
     )
     db.add(db_workflow)

@@ -14,8 +14,13 @@ export const truncateWallet = (address: string, chars = 4) => {
 };
 
 /**
- * Format SOL amount with consistent decimals
+ * Safely parses a JSON string, returning the original string or a fallback if it fails.
  */
-export const formatSol = (amount: number) => {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+export const safeJsonParse = (str: string, fallback: any = null) => {
+  if (!str) return fallback;
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    return str;
+  }
 };

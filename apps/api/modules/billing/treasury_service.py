@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from backend.db.models.models import UserWallet, Agent
 
+from backend.modules.protocols import governance_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +45,8 @@ async def check_user_solvency(
     return is_solvent
 
 
+MINIMUM_EXECUTION_FEE = 0.0001  # 0.0001 SOL base fee per task
+
 async def calculate_task_cost(
     db: AsyncSession, agent_id: str, input_tokens: float, output_tokens: float
 ) -> float:
@@ -56,7 +60,11 @@ async def calculate_task_cost(
 
     input_cost = (input_tokens / 1_000_000) * agent.price_per_million_input_tokens
     output_cost = (output_tokens / 1_000_000) * agent.price_per_million_output_tokens
-    return input_cost + output_cost
+    
+    total_cost = input_cost + output_cost
+    
+    # Apply minimum fee to ensure small executions are still billed
+    return max(total_cost, MINIMUM_EXECUTION_FEE)
 
 
 async def deduct_agentic_fee(
@@ -67,46 +75,45 @@ async def deduct_agentic_fee(
     output_tokens: float,
 ) -> float:
     """
-    Deducts dynamic fees from the internal App Wallet based on token usage and credits the Agent.
-    Returns the total amount deducted.
+    Deducts dynamic fees from the internal App Wallet and credits the Agent net of platform fees.
+    Returns the total amount deducted from the user.
     """
-    # 1. Calculate Cost
-    amount_sol = await calculate_task_cost(db, agent_id, input_tokens, output_tokens)
+    # 1. Calculate Gross Cost
+    gross_amount_sol = await calculate_task_cost(db, agent_id, input_tokens, output_tokens)
 
-    # 2. Deduct from User
+    # 2. Deduct from User (Full Amount)
     user_wallet = await get_or_create_user_wallet(db, wallet_address)
 
-    if user_wallet.balance < amount_sol:
+    if user_wallet.balance < gross_amount_sol:
         logger.error(
-            f"TREASURY: Critical failure - balance went insolvent during deduction for {wallet_address}. Amount: {amount_sol}"
+            f"TREASURY: Critical failure - balance went insolvent during deduction for {wallet_address}. Amount: {gross_amount_sol}"
         )
-        # We still deduct to reflect the cost incurred
-        user_wallet.balance -= amount_sol
-    else:
-        user_wallet.balance -= amount_sol
+    
+    user_wallet.balance -= gross_amount_sol
+    logger.info(f"TREASURY: Deducted {gross_amount_sol} SOL from user {wallet_address}")
 
-    # 3. Credit Agent (Internal Ledger)
+    # 3. Calculate Protocol Fee (e.g., 5%)
+    fee_ratio = governance_service.NETWORK_PARAMETERS.get("fee_ratio", 0.05)
+    platform_fee = gross_amount_sol * fee_ratio
+    agent_net_earning = gross_amount_sol - platform_fee
+
+    # 4. Credit Agent (Internal Ledger - Net Amount)
     agent_res = await db.execute(select(Agent).where(Agent.id == agent_id))
     agent = agent_res.scalars().first()
 
     if agent:
-        agent.balance += amount_sol
-        agent.total_earnings += amount_sol
+        agent.balance += agent_net_earning
+        agent.total_earnings += agent_net_earning
         logger.info(
-            f"TREASURY: Credited agent {agent_id} with {amount_sol} SOL for {input_tokens}in/{output_tokens}out tokens."
+            f"TREASURY: Credited agent {agent_id} with {agent_net_earning} SOL (Net of {platform_fee} fee) for {input_tokens}in/{output_tokens}out tokens."
         )
     else:
         logger.error(f"TREASURY: Agent {agent_id} not found during fee credit.")
 
+    # 5. Commit and update record
     await db.commit()
-    return amount_sol
-
-
-async def record_agent_earnings(db: AsyncSession, agent_id: str, amount_sol: float):
-    """
-    Agent earnings are now settled directly into their Squads treasury on-chain.
-    """
-    logger.info(
-        f"TREASURY: Agent {agent_id} earnings of {amount_sol} SOL will be settled on-chain."
-    )
-    pass
+    
+    # Optional: Log the platform fee for protocol accounting
+    logger.info(f"PROTOCOL: Collected {platform_fee} SOL platform fee from task execution.")
+    
+    return gross_amount_sol

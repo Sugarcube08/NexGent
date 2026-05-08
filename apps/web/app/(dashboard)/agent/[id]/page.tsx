@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { getAgent, runAgent, getConfig, getMyAppWallet } from '@/lib/api';
+import { getAgent, runAgent, getConfig, getMyAppWallet, getTasks } from '@/lib/api';
 import { setPlatformWallet } from '@/lib/solana';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
@@ -11,10 +11,10 @@ import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { 
   Loader2, ArrowLeft, Play, Terminal, 
   AlertCircle, BadgeCheck, Cpu, Activity, Lock, 
-  CheckCircle2, Fingerprint, Coins, Wallet
+  CheckCircle2, Fingerprint, Coins, Wallet, ArrowUpRight
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
-import { cn, truncateWallet } from '@/lib/utils';
+import { cn, truncateWallet, safeJsonParse } from '@/lib/utils';
 import { PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
 
@@ -27,25 +27,26 @@ export default function AgentRunPage() {
 
   const [agent, setAgent] = useState<any>(null);
   const [appWallet, setAppWallet] = useState<any>(null);
-  const [inputData, setInputData] = useState('{"prompt": "Hello"}');
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
+  const [inputData, setInputData] = useState('{"text": "Hello World"}');
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'idle' | 'signing' | 'funding' | 'executing' | 'done'>('idle');
   const [result, setResult] = useState<any>(null);
+  const [settlementSignature, setSettlementSignature] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
-  const [fheEnabled, setFheEnabled] = useState(false);
-  const [mutationFeedback, setMutationFeedback] = useState('');
-  const [mutationLoading, setMutationLoading] = useState(false);
 
   const fetchState = async () => {
     try {
-      const [agentData, config, walletData] = await Promise.all([
+      const [agentData, config, walletData, tasksData] = await Promise.all([
         getAgent(id as string),
         getConfig(),
-        isAuthenticated ? getMyAppWallet() : Promise.resolve(null)
+        isAuthenticated ? getMyAppWallet() : Promise.resolve(null),
+        isAuthenticated ? getTasks(undefined, id as string) : Promise.resolve([])
       ]);
       setAgent(agentData);
       setAppWallet(walletData);
+      setRecentTasks(tasksData.slice(0, 5));
       if (config.platform_wallet) {
         setPlatformWallet(config.platform_wallet);
       }
@@ -69,6 +70,7 @@ export default function AgentRunPage() {
 
     setError('');
     setResult(null);
+    setSettlementSignature(null);
     setLogs([]);
     try {
       const taskId = crypto.randomUUID();
@@ -82,12 +84,6 @@ export default function AgentRunPage() {
         input_data: JSON.parse(inputData), 
         task_id: taskId 
       };
-
-      if (fheEnabled) {
-        runBody.input_data._fhe_encrypted = true;
-        runBody.input_data._fhe_pubkey = publicKey.toBase58();
-        addLog("FHE Encryption Layer Active: Inputs secured via TFHE-rs.");
-      }
 
       const payloadBytes = new TextEncoder().encode(JSON.stringify({
         agent_id: runBody.agent_id,
@@ -126,26 +122,22 @@ export default function AgentRunPage() {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.status === 'running') {
-          addLog("Agent active in Deterministic WASM Sandbox.");
-        } else if (data.status === 'completed' || data.status === 'failed') {
+          addLog("Agent active in Deterministic Sandbox.");
+        } else if (data.status === 'failed') {
           setResult(data.result || data.error);
-          setStatus('done');
+          setStatus('idle');
+          setError(data.error || 'Execution fault');
+          addLog("Execution aborted.");
           fetchState();
-          if (data.status === 'failed') {
-            setError(data.error || 'Execution fault');
-            addLog("Execution aborted.");
-          } else {
-            addLog("Result finalized.");
-            if (data.receipt_hash) {
-              if (data.receipt_hash.includes('zkSTARK')) {
-                 addLog("ZK-STARK Swarm Rollup Proof Generated.");
-              }
-              addLog(`Protocol Receipt: ${data.receipt_hash.slice(0, 24)}...`);
-            }
-            if (data.result?._fhe_encrypted_output) {
-              addLog("Output verified as Homomorphically Encrypted.");
-            }
+          ws.close();
+        } else if (data.status === 'settled') {
+          setResult(data.result);
+          setStatus('idle');
+          addLog("Task settled via Atomic Protocol Receipt.");
+          if (data.receipt_hash) {
+            addLog(`PoAE Verified: ${data.receipt_hash.slice(0, 24)}...`);
           }
+          fetchState();
           ws.close();
         }
       };
@@ -153,21 +145,6 @@ export default function AgentRunPage() {
       console.error(err);
       setError(err.message || 'Execution failed');
       setStatus('idle');
-    }
-  };
-
-  const handleMutate = async () => {
-    if (!mutationFeedback) return;
-    setMutationLoading(true);
-    try {
-      const { mutateAgent } = await import('@/lib/api');
-      const offspring = await mutateAgent(agent.id, mutationFeedback);
-      addLog(`Genetic mutation successful. Spawned offspring: ${offspring.id}`);
-      router.push(`/agent/${offspring.id}`);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Mutation failed.");
-    } finally {
-      setMutationLoading(false);
     }
   };
 
@@ -220,22 +197,6 @@ export default function AgentRunPage() {
                 </span>
              </div>
           </div>
-
-          <div className="pt-6 border-t border-zinc-800/60 space-y-4">
-             <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Protocol Registry</span>
-                <BadgeCheck size={14} className="text-blue-500" />
-             </div>
-             <div className="space-y-3">
-               <div className="p-4 rounded-xl bg-zinc-900/20 border border-zinc-800 flex flex-col gap-1">
-                  <span className="text-[9px] font-bold text-zinc-700 uppercase">Passport_Asset</span>
-                  <div className="flex items-center gap-3">
-                    <Fingerprint size={16} className="text-zinc-600" />
-                    <span className="text-[11px] font-mono text-zinc-500 truncate">{agent.mint_address || "Awaiting Registry..."}</span>
-                  </div>
-               </div>
-             </div>
-          </div>
         </div>
 
         {/* Right: Console */}
@@ -247,26 +208,9 @@ export default function AgentRunPage() {
                     <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Interface</span>
                  </div>
                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer group">
-                       <input 
-                         type="checkbox" 
-                         className="sr-only" 
-                         checked={fheEnabled}
-                         onChange={(e: any) => setFheEnabled(e.target.checked)}
-                       />
-                       <div className={cn(
-                          "w-3 h-3 rounded-full border border-zinc-700 transition-all",
-                          fheEnabled ? "bg-cyan-500 border-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.5)]" : "bg-zinc-900"
-                       )} />
-                       <span className={cn(
-                          "text-[9px] font-bold uppercase transition-colors",
-                          fheEnabled ? "text-cyan-400" : "text-zinc-600"
-                       )}>FHE_Confidential</span>
-                    </label>
-                    <div className="w-px h-3 bg-zinc-800" />
                     <div className="flex items-center gap-2">
                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
-                       <span className="text-[9px] font-medium text-zinc-600 uppercase">Deterministic_WASM_Sandbox</span>
+                       <span className="text-[9px] font-medium text-zinc-600 uppercase">Deterministic_Sandbox</span>
                     </div>
                  </div>
               </div>
@@ -290,35 +234,58 @@ export default function AgentRunPage() {
               </div>
            </Card>
 
-           {/* Genetic Mutation Panel */}
-           <Card className="p-6 border-zinc-800/60 bg-zinc-900/20 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
+                 {/* Recent Executions */}
+                 <div className="space-y-4">
+                 <div className="flex items-center justify-between px-1">
                  <div className="flex items-center gap-2">
-                    <Activity size={14} className="text-purple-500" />
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Genetic Mutation Engine</span>
+                    <Activity size={14} className="text-zinc-500" />
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Recent Execution History</span>
                  </div>
-                 <span className="text-[9px] font-medium text-zinc-600 uppercase">Evolutionary_WASM_Replication</span>
-              </div>
-              <div className="flex gap-3">
-                 <input 
-                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-300 outline-none focus:border-purple-500/50 transition-colors"
-                    placeholder="Provide performance feedback for logic optimization..."
-                    value={mutationFeedback}
-                    onChange={(e: any) => setMutationFeedback(e.target.value)}
-                 />
-                 <Button 
-                    variant="outline"
-                    className="border-purple-500/20 text-purple-400 h-auto px-6 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-500/5"
-                    onClick={handleMutate}
-                    isLoading={mutationLoading}
-                    disabled={!mutationFeedback}
+                 <button 
+                   onClick={() => router.push('/executions')}
+                   className="text-[9px] font-bold text-cyber-cyan uppercase hover:underline"
                  >
-                    Mutate Agent
-                 </Button>
-              </div>
-           </Card>
+                   View All_History
+                 </button>
+                 </div>
 
-           {/* Logs Overlay */}
+                 <div className="space-y-3">
+                 {recentTasks.length > 0 ? recentTasks.map((task) => (
+                    <div key={task.id} className="p-4 rounded-xl bg-zinc-900/10 border border-zinc-800/40 hover:border-zinc-700/60 transition-all group">
+                       <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                             <div className={cn(
+                               "w-1.5 h-1.5 rounded-full",
+                               task.status === 'completed' || task.status === 'settled' ? "bg-green-500" :
+                               task.status === 'failed' ? "bg-red-500" : "bg-zinc-500"
+                             )} />
+                             <span className="text-[10px] font-mono text-zinc-400">{task.id.slice(0, 12)}...</span>
+                          </div>
+                          <span className="text-[9px] font-mono text-zinc-600">{new Date(task.created_at).toLocaleString()}</span>
+                       </div>
+
+                       <div className="bg-black/40 rounded-lg p-3 border border-zinc-900/50">
+                          <p className="text-[10px] font-mono text-zinc-500 line-clamp-2">
+                             {task.result ? (
+                               typeof safeJsonParse(task.result) === 'object' 
+                                 ? JSON.stringify(safeJsonParse(task.result)).slice(0, 150)
+                                 : task.result.slice(0, 150)
+                             ) : (
+                               <span className="italic opacity-50">No result payload.</span>
+                             )}
+                          </p>
+                       </div>
+                    </div>
+                 )) : (
+                    <div className="py-10 text-center border border-dashed border-zinc-800 rounded-2xl">
+                       <p className="text-[10px] font-bold text-zinc-700 uppercase tracking-widest">No previous executions found.</p>
+                    </div>
+                 )}
+                 </div>
+                 </div>
+
+                 {/* Logs Overlay */}
+
            {logs.length > 0 && (
               <div className="p-6 rounded-2xl bg-zinc-950 border border-zinc-800 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-bottom-4">
                  <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
@@ -335,9 +302,11 @@ export default function AgentRunPage() {
                     ))}
                  </div>
                  {result && (
-                    <div className="mt-2 pt-4 border-t border-zinc-900">
+                    <div className="mt-2 pt-4 border-t border-zinc-900 space-y-4">
                        <pre className="text-xs font-mono text-green-400 bg-green-500/5 p-4 rounded-xl border border-green-500/10 overflow-x-auto">
-                          {JSON.stringify(result, null, 2)}
+                          {typeof safeJsonParse(result) === 'object' 
+                            ? JSON.stringify(safeJsonParse(result), null, 2) 
+                            : result}
                        </pre>
                     </div>
                  )}
@@ -349,4 +318,3 @@ export default function AgentRunPage() {
     </div>
   );
 }
-

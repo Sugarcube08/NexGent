@@ -23,6 +23,7 @@ import '@xyflow/react/dist/style.css';
 import { Play, Square, Bot, GitBranch, Save, Trash2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { validateWorkflow } from '@/lib/api';
 
 // --- Custom Nodes ---
 
@@ -48,22 +49,42 @@ const EndNode = ({ data }: NodeProps) => (
 
 const AgentNode = ({ id, data }: NodeProps) => {
   const agents = data.agents as any[] || [];
+  const selectedAgent = agents.find(a => a.id === data.agent_id);
   
   return (
-    <div className={`${nodeStyle} border-blue-500/50 bg-blue-500/5 min-w-[200px]`}>
+    <div className={`${nodeStyle} border-blue-500/50 bg-blue-500/5 min-w-[240px]`}>
       <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500 border-2 border-[#0c0c0e]" />
-      <div className="flex items-center gap-2 mb-3 text-blue-400 font-bold tracking-widest text-[10px] uppercase">
-        <Bot size={12} /> Executor Agent
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2 text-blue-400 font-bold tracking-widest text-[10px] uppercase">
+          <Bot size={12} /> Executor Agent
+        </div>
+        {selectedAgent && (
+          <div className="px-2 py-0.5 rounded-full bg-blue-500/20 text-[8px] font-bold text-blue-300 uppercase">
+            v{selectedAgent.current_version}
+          </div>
+        )}
       </div>
-      <div className="space-y-2">
-        <select 
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-[10px] font-medium text-zinc-200"
-          value={data.agent_id as string || ''}
-          onChange={(e) => (data as any).onChange(id, 'agent_id', e.target.value)}
-        >
-          <option value="">Select Agent...</option>
-          {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+      
+      <div className="space-y-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-[8px] text-zinc-500 uppercase font-bold">Select Intelligence</label>
+          <select 
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-[10px] font-medium text-zinc-200 outline-none focus:border-blue-500/50 transition-colors"
+            value={data.agent_id as string || ''}
+            onChange={(e) => (data as any).onChange(id, 'agent_id', e.target.value)}
+          >
+            <option value="">Choose Agent...</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+        
+        {selectedAgent && (
+          <div className="p-2 rounded-lg bg-zinc-900/50 border border-zinc-800/50">
+            <p className="text-[9px] text-zinc-400 line-clamp-2 leading-relaxed">
+              {selectedAgent.description || 'No description provided.'}
+            </p>
+          </div>
+        )}
       </div>
       <Handle type="source" position={Position.Right} className="w-3 h-3 bg-blue-500 border-2 border-[#0c0c0e]" />
     </div>
@@ -71,26 +92,53 @@ const AgentNode = ({ id, data }: NodeProps) => {
 };
 
 const ConditionNode = ({ id, data }: NodeProps) => (
-  <div className={`${nodeStyle} border-purple-500/50 bg-purple-500/5 min-w-[200px]`}>
+  <div className={`${nodeStyle} border-purple-500/50 bg-purple-500/5 min-w-[220px]`}>
     <Handle type="target" position={Position.Left} className="w-3 h-3 bg-purple-500 border-2 border-[#0c0c0e]" />
     <div className="flex items-center gap-2 mb-3 text-purple-400 font-bold tracking-widest text-[10px] uppercase">
-      <GitBranch size={12} /> Logic Gate
+      <GitBranch size={12} /> Logic Gate (IF)
     </div>
     <div className="space-y-2">
-      <Input 
-        placeholder="Field (e.g. status)" 
-        className="h-7 text-[10px] bg-zinc-950 border-zinc-800"
-        value={data.field as string || ''}
-        onChange={(e) => (data as any).onChange(id, 'field', e.target.value)}
-      />
-      <Input 
-        placeholder="Value (e.g. success)" 
-        className="h-7 text-[10px] bg-zinc-950 border-zinc-800"
-        value={data.value as string || ''}
-        onChange={(e) => (data as any).onChange(id, 'value', e.target.value)}
-      />
+      <div className="flex flex-col gap-1">
+        <label className="text-[8px] text-zinc-500 uppercase font-bold">Field to check</label>
+        <Input 
+          placeholder="e.g. data.status" 
+          className="h-7 text-[10px] bg-zinc-950 border-zinc-800"
+          value={data.field as string || ''}
+          onChange={(e) => (data as any).onChange(id, 'field', e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-[8px] text-zinc-500 uppercase font-bold">Expected Value</label>
+        <Input 
+          placeholder="e.g. 200" 
+          className="h-7 text-[10px] bg-zinc-950 border-zinc-800"
+          value={data.value as string || ''}
+          onChange={(e) => (data as any).onChange(id, 'value', e.target.value)}
+        />
+      </div>
     </div>
-    <Handle type="source" position={Position.Right} className="w-3 h-3 bg-purple-500 border-2 border-[#0c0c0e]" />
+    
+    {/* Multiple Outputs */}
+    <div className="absolute -right-3 top-1/2 -translate-y-1/2 flex flex-col gap-8">
+      <div className="relative">
+        <Handle 
+          type="source" 
+          position={Position.Right} 
+          id="true"
+          className="w-3 h-3 bg-green-500 border-2 border-[#0c0c0e]" 
+        />
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-green-500 uppercase">True</span>
+      </div>
+      <div className="relative">
+        <Handle 
+          type="source" 
+          position={Position.Right} 
+          id="false"
+          className="w-3 h-3 bg-red-500 border-2 border-[#0c0c0e]" 
+        />
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-red-500 uppercase">False</span>
+      </div>
+    </div>
   </div>
 );
 
@@ -119,6 +167,48 @@ function Flow({ agents, onSave, isLoading }: SwarmFlowBuilderProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [name, setName] = useState('');
+  const [isSimulation, setIsSimulation] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [isValidating, setIsValidating] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (nodes.length < 2) return;
+      
+      setIsValidating(true);
+      try {
+        const formattedNodes = nodes.map(n => {
+          const config = { ...n.data };
+          delete (config as any).agents;
+          delete (config as any).onChange;
+          return {
+            id: n.id,
+            type: n.type,
+            config: config,
+          };
+        });
+        const formattedEdges = edges.map(e => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          source_handle: e.sourceHandle,
+        }));
+
+        const res = await validateWorkflow({ 
+          name: name || 'unnamed', 
+          nodes: formattedNodes, 
+          edges: formattedEdges 
+        });
+        setValidationErrors(res.errors || []);
+      } catch (err) {
+        console.error("Validation failed", err);
+      } finally {
+        setIsValidating(false);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [nodes, edges, name]);
 
   const updateNodeData = useCallback((id: string, key: string, value: any) => {
     setNodes((nds) =>
@@ -204,13 +294,16 @@ function Flow({ agents, onSave, isLoading }: SwarmFlowBuilderProps) {
       id: e.id,
       source: e.source,
       target: e.target,
-      condition: '' // Advanced conditions can be added later
+      source_handle: e.sourceHandle,
+      condition: '' 
     }));
 
     onSave({
+      id: `wf_${Math.random().toString(36).substr(2, 9)}`,
       name,
       nodes: formattedNodes,
-      edges: formattedEdges
+      edges: formattedEdges,
+      is_simulation_mode: isSimulation
     });
   };
 
@@ -256,13 +349,36 @@ function Flow({ agents, onSave, isLoading }: SwarmFlowBuilderProps) {
             onChange={(e) => setName(e.target.value)}
             className="bg-zinc-950 border-zinc-800 h-10 text-xs"
           />
+
+          <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-950/50">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-zinc-300">Simulation Mode</span>
+              <span className="text-[8px] text-zinc-500 font-medium italic">No-cost dry run</span>
+            </div>
+            <input 
+              type="checkbox" 
+              checked={isSimulation}
+              onChange={(e) => setIsSimulation(e.target.checked)}
+              className="w-4 h-4 rounded border-zinc-800 bg-zinc-900 text-blue-500 focus:ring-blue-500/20"
+            />
+          </div>
+
+          {validationErrors.length > 0 && (
+            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 space-y-1">
+              <p className="text-[8px] font-black text-red-400 uppercase tracking-tighter">Validation Failed</p>
+              {validationErrors.map((err, i) => (
+                <p key={i} className="text-[9px] text-red-300/70 leading-tight">• {err}</p>
+              ))}
+            </div>
+          )}
+
           <Button 
             className="w-full h-10 rounded-xl font-bold gap-2 text-xs shadow-xl shadow-blue-900/10" 
             onClick={handleSave} 
-            isLoading={isLoading}
-            disabled={!name || nodes.length < 2}
+            isLoading={isLoading || isValidating}
+            disabled={!name || nodes.length < 2 || validationErrors.length > 0}
           >
-            <Zap size={14} /> Register Swarm
+            <Zap size={14} /> {isSimulation ? 'Simulate Swarm' : 'Register Swarm'}
           </Button>
         </div>
       </div>

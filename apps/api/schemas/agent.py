@@ -39,15 +39,14 @@ class AgentResponse(AgentBase):
     versions: List[AgentVersion]
     current_version: str
     creator_wallet: str
-    mint_address: Optional[str] = None
 
-    # Protocol Stats
-    total_runs: int
-    successful_runs: int
+    # Execution Stats
+    total_runs: float
+    successful_runs: float
 
-    # AgentOS Protocol Fields
-    squads_vault_pda: Optional[str] = None
-    credential_registry_address: Optional[str] = None
+    # Financials
+    balance: float
+    total_earnings: float
 
     created_at: datetime
 

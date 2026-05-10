@@ -16,8 +16,7 @@ WORKDIR /app
 WORKDIR /app/api
 COPY apps/api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY apps/api/ ./backend/
-RUN touch ./backend/__init__.py
+COPY apps/api/ .
 
 # Setup Sandbox
 WORKDIR /app/sandbox

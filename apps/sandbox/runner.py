@@ -165,9 +165,10 @@ def audit_hook(event, args):
         path = args[0]
         if isinstance(path, (str, bytes)):
             path_str = path if isinstance(path, str) else path.decode(errors='ignore')
-            # Allow venv and outputs but block system escape
+            # Allow venv, outputs, and safe system metadata but block system escape
             if any(p in path_str for p in ['/etc/', '/root/', '/home/', '~', '../']) and '{agent_id}' not in path_str:
-                raise PermissionError(f"Shoujiki Sandbox: Filesystem escape detected ({{path_str}})")
+                if path_str != '/etc/os-release':
+                    raise PermissionError(f"Shoujiki Sandbox: Filesystem escape detected ({{path_str}})")
 
 sys.addaudithook(audit_hook)
 # --------------------------------------
